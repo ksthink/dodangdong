@@ -481,24 +481,79 @@ npx supabase db push
 
 ---
 
-## 배포
+## 배포 (Vercel)
+
+### 1. Supabase 클라우드 프로젝트
+
+리전은 **Northeast Asia (Seoul)** 을 고른다. 버셀 함수도 `icn1` 에 두므로 왕복이 짧아진다.
+
+스키마 적용은 둘 중 하나.
+
+```bash
+npx supabase link --project-ref <ref>
+npx supabase db push
+```
+
+CLI 를 쓰기 어려우면 [`scripts/schema.sql`](scripts/schema.sql) 을 대시보드 SQL Editor 에
+통째로 붙여넣는다. 마이그레이션을 순서대로 이어붙인 파일이다.
+
+### 2. Google OAuth 클라이언트
+
+1. Google Cloud Console → 새 프로젝트 → **Google Drive API 사용 설정**
+2. OAuth 동의 화면 → 외부 → 범위에 `.../auth/drive.file` 추가
+3. 사용자 인증 정보 → OAuth 클라이언트 ID → **웹 애플리케이션**
+4. 승인된 리디렉션 URI:
+   ```
+   https://<배포주소>/api/google/callback
+   http://localhost:8443/api/google/callback
+   ```
+
+동의 화면에서 뜨는 **"확인되지 않은 앱"** 경고는 정상이다. 본인이 만든 앱이라 Google 목록에
+없을 뿐이며, 고급 → 이동으로 통과한다. 관리자 한 명만 거치면 되는 절차다.
+
+### 3. 버셀 환경변수
+
+프로젝트 설정 → Environment Variables 에 다음을 넣는다. `DEV_ORIGINS` 는 필요 없다.
+
+| 이름 | 값 |
+| --- | --- |
+| `SUPABASE_URL` | 클라우드 Project URL |
+| `SUPABASE_SECRET_KEY` | secret / service_role key |
+| `SESSION_SECRET` | `openssl rand -base64 32` 로 **새로** 생성 |
+| `ADMIN_PASSWORD` | 관리자 암호 |
+| `FAMILY_PASSWORD` | 가족 공유 암호 |
+| `GOOGLE_CLIENT_ID` | OAuth 클라이언트 ID |
+| `GOOGLE_CLIENT_SECRET` | OAuth 클라이언트 시크릿 |
+
+### 4. 배포 후
+
+관리자로 로그인 → **관리 → 저장소 → Google Drive 연결**. 이때 발급된 리프레시 토큰이
+`app_setting` 테이블에 저장되고, 그때부터 업로드가 가능해진다.
+
+### 서버리스에서 주의할 점
+
+- **요청 본문 4.5MB 제한** — 파일이 서버를 거치지 않는 구조라 해당 없다. 다만 이 제약이
+  업로드 설계를 정한 이유이므로, 서버로 파일을 받는 코드를 새로 만들지 말 것.
+- **함수 실행 시간** — 색인(`/api/upload/register`)은 이미지를 내려받아 축소본을 만든다.
+  `maxDuration = 60` 으로 두었고, 60MB 넘는 이미지는 축소본을 포기하고 원본만 남긴다.
+- **원본 스트리밍 안 함** — 수 GB 영상을 함수가 중계하면 시간·메모리를 감당하지 못한다.
+  원본 요청은 Drive 화면으로 보낸다 (관리자만 도달).
+
+### 직접 호스팅할 때
 
 ```bash
 npm run build
-npm run start          # 0.0.0.0:8443
+npm run start          # 127.0.0.1:8443
 ```
 
-**HTTPS 없이 외부에 공개하지 마세요.** 로그인 암호가 평문으로 흐릅니다. 리버스 프록시로
-TLS 를 붙이는 것을 전제로 합니다 (Caddy 예시).
+**HTTPS 없이 외부에 공개하지 말 것.** 로그인 암호가 평문으로 흐른다. `NODE_ENV=production`
+에서는 세션 쿠키에 `secure` 플래그가 붙으므로 HTTPS 가 없으면 로그인이 유지되지도 않는다.
 
 ```
 archive.example.kr {
     reverse_proxy 127.0.0.1:8443
 }
 ```
-
-`NODE_ENV=production` 에서는 세션 쿠키에 `secure` 플래그가 붙으므로, HTTPS 가 없으면
-로그인이 유지되지 않습니다.
 
 ---
 

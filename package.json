@@ -1,11 +1,11 @@
 {
-  "name": "scaffold",
+  "name": "dodangdong-archive",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 8443",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 8443",
+    "start": "next start -p 8443",
     "lint": "eslint",
     "seed": "node --experimental-websocket scripts/seed.mjs"
   },
@@ -26,5 +26,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
