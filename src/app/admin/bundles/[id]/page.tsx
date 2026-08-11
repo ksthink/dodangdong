@@ -49,9 +49,21 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
       <section className="stack">
         <h2>자료 올리기</h2>
         <p className="small">
-          여기 올린 자료는 이 묶음의 출처·시기·권리·접근등급을 그대로 물려받습니다. 같은 파일을 두 번
-          올리면 체크섬으로 걸러집니다.
+          파일은 브라우저에서 Google Drive 로 곧장 갑니다 — 우리 서버를 거치지 않으므로 크기
+          제한이 없고, 끊겨도 이어서 올라갑니다. 올린 자료는 이 묶음의 출처·시기·권리·접근등급을
+          그대로 물려받고, 같은 파일을 두 번 올리면 체크섬으로 걸러집니다.
         </p>
+        {bundle.drive_folder_id && (
+          <a
+            href={`https://drive.google.com/drive/folders/${bundle.drive_folder_id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="small"
+            style={{ color: 'var(--accent)' }}
+          >
+            이 묶음의 Drive 폴더 열기 →
+          </a>
+        )}
         <Uploader bundleId={id} />
       </section>
 

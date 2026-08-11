@@ -5,11 +5,19 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/access';
 import { edtfColumns, parseEdtf } from '@/lib/edtf';
+import { disconnect } from '@/lib/drive';
 
 /** 빈 문자열은 NULL 로. 상속 필드에서 ''과 NULL 은 뜻이 다르다. */
 function nz(v: FormDataEntryValue | null): string | null {
   const s = typeof v === 'string' ? v.trim() : '';
   return s === '' ? null : s;
+}
+
+/** Google Drive 연결 해제. Drive 의 파일과 기술 정보는 그대로 남는다. */
+export async function disconnectDrive() {
+  await requireAdmin();
+  await disconnect();
+  revalidatePath('/admin/storage');
 }
 
 export async function createAcquisition(formData: FormData) {

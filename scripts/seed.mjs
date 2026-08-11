@@ -1,14 +1,14 @@
 /**
- * 시드 — 실제 적재 경로를 그대로 통과시킨다.
+ * 시드 — 개발용 표본 자료.
  *
- * DB 에 행을 직접 꽂아 넣으면 파이프라인이 도는지 알 수 없으므로,
- * 파일은 전부 /api/upload 로 올려 체크섬·EXIF·축소본 생성까지 실제로 거치게 한다.
+ * 운영 적재는 브라우저 → Google Drive 직행이지만, 시드는 Drive 연결 없이도 돌아야 하므로
+ * Supabase 원본 경로를 쓴다. 체크섬·축소본 생성은 실제와 같은 방식으로 거친다.
  *
- *   node scripts/seed.mjs            (dev 서버가 떠 있어야 함)
+ *   npm run seed        (dev 서버 없이도 동작)
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { readFileSync } from 'node:fs';
 
@@ -22,19 +22,9 @@ const env = Object.fromEntries(
     }),
 );
 
-const APP = process.env.APP_URL ?? 'http://127.0.0.1:3000';
 const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
   auth: { persistSession: false },
 });
-
-// access.ts 와 같은 방식으로 관리자 세션 쿠키를 만든다.
-function adminCookie() {
-  const expires = Date.now() + 86400_000;
-  const payload = `admin.${expires}`;
-  const sig = createHmac('sha256', env.SESSION_SECRET).update(payload).digest('base64url');
-  return `archive_session=${payload}.${sig}`;
-}
-const COOKIE = adminCookie();
 
 // ---------------------------------------------------------------- 표본 파일
 
@@ -104,26 +94,87 @@ function sampleWav(seconds = 3) {
   return Buffer.concat([header, data]);
 }
 
+/**
+ * 표본 자료 적재.
+ *
+ * 운영에서는 브라우저 → Drive 직행 경로를 쓰지만, 시드는 Drive 연결 없이도 돌아야 하므로
+ * Supabase 원본 경로(provider = 'supabase')를 쓴다. src/lib/ingest.ts 의 ingestBytes 와
+ * 같은 일을 하며, 개발용 픽스처라 중복을 감수한다.
+ */
 async function upload(bundleId, filename, buffer, mime) {
-  const form = new FormData();
-  form.append('bundle_id', bundleId);
-  form.append('file', new Blob([buffer], { type: mime }), filename);
-  const res = await fetch(`${APP}/api/upload`, {
-    method: 'POST',
-    headers: { cookie: COOKIE },
-    body: form,
-  });
-  const json = await res.json();
-  if (json.status !== 'created') {
-    console.log(`   ! ${filename}: ${json.status} ${json.reason ?? ''}`);
+  const checksum = createHash('sha256').update(buffer).digest('hex');
+
+  const { data: dupe } = await supabase
+    .from('file').select('item_id').eq('checksum_sha256', checksum).eq('role', 'original').maybeSingle();
+  if (dupe) return { status: 'duplicate', itemId: dupe.item_id };
+
+  const { data: bundle } = await supabase
+    .from('bundle').select('id, title, period_edtf').eq('id', bundleId).single();
+
+  const type = mime.startsWith('image/') ? 'StillImage'
+    : mime.startsWith('audio/') ? 'Sound'
+    : mime.startsWith('video/') ? 'MovingImage'
+    : mime.startsWith('text/') || mime === 'application/pdf' ? 'Text'
+    : 'PhysicalObject';
+
+  const { count } = await supabase
+    .from('item').select('id', { count: 'exact', head: true }).eq('bundle_id', bundleId);
+  const seq = (count ?? 0) + 1;
+
+  let width = null, height = null;
+  if (type === 'StillImage') {
+    try { const m = await sharp(buffer).metadata(); width = m.width; height = m.height; } catch {}
   }
-  return json;
+
+  const edtf = bundle.period_edtf ?? null;
+  const { data: item, error } = await supabase.from('item').insert({
+    bundle_id: bundleId,
+    seq,
+    title: `${bundle.title} ${String(seq).padStart(3, '0')}`,
+    type,
+    created_edtf: edtf,
+    created_start: edtf ? `${edtf.slice(0, 4).replace(/X/g, '0')}-01-01` : null,
+    created_end: edtf ? `${edtf.slice(0, 4).replace(/X/g, '9')}-12-31` : null,
+    created_precision: edtf ? (edtf.includes('X') ? 'decade' : edtf.includes('/') ? 'interval' : 'year') : 'unknown',
+  }).select('id, identifier, title').single();
+  if (error) { console.log(`   ! ${filename}: ${error.message}`); return { status: 'failed' }; }
+
+  const ext = filename.split('.').pop().toLowerCase();
+  const originalPath = `${bundleId}/${item.id}/original.${ext}`;
+  const up = await supabase.storage.from('originals').upload(originalPath, buffer, { contentType: mime });
+  if (up.error) { console.log(`   ! ${filename}: ${up.error.message}`); return { status: 'failed' }; }
+
+  const rows = [{
+    item_id: item.id, role: 'original', provider: 'supabase',
+    storage_bucket: 'originals', storage_path: originalPath, original_filename: filename,
+    mime, bytes: buffer.byteLength, width, height,
+    checksum_sha256: checksum, checksum_verified: true,
+  }];
+
+  if (type === 'StillImage' && width) {
+    for (const d of [{ role: 'thumb', width: 400 }, { role: 'display', width: 1400 }]) {
+      const out = await sharp(buffer).rotate()
+        .resize({ width: Math.min(d.width, width), withoutEnlargement: true })
+        .jpeg({ quality: 82, progressive: true }).toBuffer({ resolveWithObject: true });
+      const path = `${item.id}/${d.role}.jpg`;
+      const res = await supabase.storage.from('derivatives')
+        .upload(path, out.data, { contentType: 'image/jpeg', upsert: true });
+      if (!res.error) rows.push({
+        item_id: item.id, role: d.role, provider: 'supabase',
+        storage_bucket: 'derivatives', storage_path: path, mime: 'image/jpeg',
+        bytes: out.data.byteLength, width: out.info.width, height: out.info.height,
+      });
+    }
+  }
+
+  await supabase.from('file').insert(rows);
+  return { status: 'created', itemId: item.id, identifier: item.identifier };
 }
 
 // ---------------------------------------------------------------- 시드 본문
 
 async function main() {
-  console.log('시드 시작 —', APP);
+  console.log('시드 시작');
 
   // 기존 시드 정리(파일까지)
   const { data: oldItems } = await supabase.from('item').select('id');

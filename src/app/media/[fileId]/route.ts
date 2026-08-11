@@ -1,15 +1,19 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { currentRole, canView, type AccessLevel } from '@/lib/access';
+
+export const runtime = 'nodejs';
 
 /**
  * 파일은 이 경로로만 나간다.
  *
- * 스토리지 버킷은 둘 다 비공개다. 서명 URL 을 브라우저에 넘기면 그 주소가
- * 그대로 유출될 수 있으므로, 접근 등급을 확인한 뒤 서버가 직접 흘려보낸다.
- * 원본(original)은 관리자만 받을 수 있다 — 화면에는 축소본만 쓴다.
+ * Supabase 버킷은 둘 다 비공개다. 서명 URL 을 브라우저에 넘기면 그 주소가 그대로
+ * 유출될 수 있으므로, 접근 등급을 확인한 뒤 서버가 직접 흘려보낸다.
+ *
+ * 원본은 Drive 에 있고 관리자만 접근할 수 있다. 원본은 수백 MB~수 GB 일 수 있어
+ * 서버가 중계하면 함수 시간·메모리를 감당하지 못하므로, Drive 화면으로 보낸다.
+ * 관리자는 어차피 자기 Google 계정으로 로그인되어 있다.
  */
-
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await ctx.params;
   const role = await currentRole();
@@ -17,7 +21,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: st
 
   const { data: file } = await supabase
     .from('file')
-    .select('id, item_id, role, storage_bucket, storage_path, mime')
+    .select('id, item_id, role, provider, storage_bucket, storage_path, mime')
     .eq('id', fileId)
     .maybeSingle();
 
@@ -35,10 +39,15 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: st
     return new Response('열람 권한이 없습니다', { status: 403 });
   }
   if (file.role === 'original' && role !== 'admin') {
-    return new Response('원본은 관리자만 내려받을 수 있습니다', { status: 403 });
+    return new Response('원본은 관리자만 볼 수 있습니다', { status: 403 });
   }
   if (item.is_archived && role !== 'admin') {
     return new Response('없는 자료입니다', { status: 404 });
+  }
+
+  // Drive 원본 — 관리자만 여기 도달한다.
+  if (file.provider === 'gdrive') {
+    return NextResponse.redirect(`https://drive.google.com/file/d/${file.storage_path}/view`);
   }
 
   const { data: blob, error } = await supabase.storage
@@ -52,9 +61,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: st
       'Content-Type': file.mime ?? 'application/octet-stream',
       // 등급에 따라 캐시가 달라진다. 공개 자료만 공유 캐시를 허용한다.
       'Cache-Control':
-        item.access_level === 'public'
-          ? 'public, max-age=3600'
-          : 'private, no-store',
+        item.access_level === 'public' ? 'public, max-age=3600' : 'private, no-store',
     },
   });
 }

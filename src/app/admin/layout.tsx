@@ -10,6 +10,7 @@ const NAV = [
   { href: '/admin/bundles', label: '묶음' },
   { href: '/admin/people', label: '인물' },
   { href: '/admin/collections', label: '모음집' },
+  { href: '/admin/storage', label: '저장소' },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
