@@ -77,6 +77,42 @@ export async function verifySession(value: string | undefined): Promise<Role> {
 }
 
 /**
+ * 1단계(아이디·비밀번호)만 통과한 상태를 담는 짧은 표.
+ *
+ * 여기서 세션 쿠키를 내주면 2단계가 무의미해지므로, 별도의 5분짜리 쪽지를 준다.
+ * 역할 문자열 앞에 'pending:' 을 붙여 서명하므로, 이 쪽지를 세션 쿠키 자리에
+ * 그대로 넣어도 verifySession 이 방문자로 판정한다.
+ */
+const PENDING_MAX_AGE_MS = 5 * 60 * 1000;
+export const PENDING_COOKIE = 'archive_pending';
+export const PENDING_MAX_AGE = PENDING_MAX_AGE_MS / 1000;
+
+export async function makePendingValue(role: Exclude<Role, 'visitor'>): Promise<string> {
+  const expires = Date.now() + PENDING_MAX_AGE_MS;
+  const payload = `pending:${role}.${expires}`;
+  return `${payload}.${await hmac(payload)}`;
+}
+
+export async function verifyPending(value: string | undefined): Promise<Role> {
+  if (!value) return 'visitor';
+  const parts = value.split('.');
+  if (parts.length !== 3) return 'visitor';
+  const [tagged, expires, sig] = parts;
+  if (!tagged.startsWith('pending:')) return 'visitor';
+  const role = tagged.slice('pending:'.length);
+  if (role !== 'admin' && role !== 'family') return 'visitor';
+  if (!/^\d+$/.test(expires) || Number(expires) < Date.now()) return 'visitor';
+
+  let expected: string;
+  try {
+    expected = await hmac(`${tagged}.${expires}`);
+  } catch {
+    return 'visitor';
+  }
+  return safeEqual(sig, expected) ? role : 'visitor';
+}
+
+/**
  * 아이디와 비밀번호로 역할을 판정한다.
  *
  * 가족 계정은 환경변수가 설정된 경우에만 살아난다. 지금은 관리자만 두었으므로

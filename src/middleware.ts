@@ -12,7 +12,8 @@ import { verifySession, SESSION_COOKIE } from '@/lib/session';
  * 판단하면 언젠가 어긋난다.
  */
 
-const PUBLIC_PATHS = ['/login', '/logout'];
+// /login/verify 는 1단계만 통과한 상태에서 들어오므로 세션이 아직 없다.
+const PUBLIC_PATHS = ['/login', '/login/verify', '/logout'];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

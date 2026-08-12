@@ -6,11 +6,55 @@ import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/access';
 import { edtfColumns, parseEdtf } from '@/lib/edtf';
 import { disconnect } from '@/lib/drive';
+import {
+  beginEnrollment,
+  activateEnrollment,
+  disableTotp,
+  regenerateRecoveryCodes,
+} from '@/lib/two-factor';
 
 /** 빈 문자열은 NULL 로. 상속 필드에서 ''과 NULL 은 뜻이 다르다. */
 function nz(v: FormDataEntryValue | null): string | null {
   const s = typeof v === 'string' ? v.trim() : '';
   return s === '' ? null : s;
+}
+
+// ---------------------------------------------------------------- 2단계 인증
+
+export async function startEnrollment() {
+  await requireAdmin();
+  await beginEnrollment();
+  revalidatePath('/admin/security');
+  redirect('/admin/security');
+}
+
+export async function confirmEnrollment(formData: FormData) {
+  await requireAdmin();
+  const codes = await activateEnrollment(String(formData.get('code') ?? ''));
+  if (!codes) {
+    redirect(`/admin/security?error=${encodeURIComponent('코드가 맞지 않습니다. 앱에 뜬 6자리를 다시 확인해 주세요.')}`);
+  }
+  // 복구 코드는 이 한 번만 보여준다. 어디에도 원본을 남기지 않는다.
+  redirect(`/admin/security?codes=${encodeURIComponent(codes.join(','))}`);
+}
+
+export async function newRecoveryCodes(formData: FormData) {
+  await requireAdmin();
+  const codes = await regenerateRecoveryCodes(String(formData.get('code') ?? ''));
+  if (!codes) {
+    redirect(`/admin/security?error=${encodeURIComponent('코드가 맞지 않습니다.')}`);
+  }
+  redirect(`/admin/security?codes=${encodeURIComponent(codes.join(','))}`);
+}
+
+export async function turnOffTotp(formData: FormData) {
+  await requireAdmin();
+  const ok = await disableTotp(String(formData.get('code') ?? ''));
+  if (!ok) {
+    redirect(`/admin/security?error=${encodeURIComponent('코드가 맞지 않습니다.')}`);
+  }
+  revalidatePath('/admin/security');
+  redirect(`/admin/security?done=${encodeURIComponent('2단계 인증을 껐습니다.')}`);
 }
 
 /** Google Drive 연결 해제. Drive 의 파일과 기술 정보는 그대로 남는다. */

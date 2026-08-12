@@ -5,10 +5,14 @@ import {
   makeSessionValue,
   familyLoginEnabled,
   safeNextPath,
+  makePendingValue,
   SESSION_COOKIE,
   SESSION_MAX_AGE,
+  PENDING_COOKIE,
+  PENDING_MAX_AGE,
   currentRole,
 } from '@/lib/access';
+import { totpRequired } from '@/lib/two-factor';
 import {
   clientIp,
   checkLoginAllowed,
@@ -58,6 +62,20 @@ export default async function LoginPage({
     }
 
     const jar = await cookies();
+
+    // 2단계 인증이 켜져 있으면 여기서 세션을 내주지 않는다.
+    // 5분짜리 쪽지만 주고 인증 앱 코드를 받으러 보낸다.
+    if (granted === 'admin' && (await totpRequired())) {
+      jar.set(PENDING_COOKIE, await makePendingValue(granted), {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: PENDING_MAX_AGE,
+        path: '/',
+      });
+      redirect(`/login/verify?next=${encodeURIComponent(target)}`);
+    }
+
     jar.set(SESSION_COOKIE, await makeSessionValue(granted), {
       httpOnly: true,
       sameSite: 'lax',
