@@ -1,20 +1,23 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import {
-  roleForPassword,
+  roleForCredentials,
   makeSessionValue,
+  familyLoginEnabled,
   SESSION_COOKIE,
   SESSION_MAX_AGE,
   currentRole,
 } from '@/lib/access';
+import { VERSION_LABEL } from '@/lib/version';
+import { IconHeart, IconLock } from '@/components/icons';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * 로그인 — 공유 암호 하나.
+ * 문 앞 화면.
  *
- * 가족마다 계정을 만들지 않는다. 어르신이 쓰실 수 있어야 하고,
- * 실제 위험은 "누가 봤는지 모르는 것"이 아니라 "아무도 못 들어오는 것"이다.
+ * 사이트에 들어오는 모든 사람이 처음 보는 곳이다. 이름 · 버전 · 로그인 창,
+ * 그 셋만 둔다. 아카이브의 내용은 한 조각도 밖으로 새지 않는다.
  */
 export default async function LoginPage({
   searchParams,
@@ -23,17 +26,23 @@ export default async function LoginPage({
 }) {
   const { error, next } = await searchParams;
   const role = await currentRole();
+  if (role !== 'visitor') redirect(next && next.startsWith('/') ? next : '/');
+
+  const familyOpen = familyLoginEnabled();
 
   async function login(formData: FormData) {
     'use server';
+    const username = String(formData.get('username') ?? '');
     const password = String(formData.get('password') ?? '');
     const target = String(formData.get('next') ?? '/');
-    const granted = roleForPassword(password);
+
+    const granted = roleForCredentials(username, password);
     if (!granted) {
       redirect(`/login?error=1&next=${encodeURIComponent(target)}`);
     }
+
     const jar = await cookies();
-    jar.set(SESSION_COOKIE, makeSessionValue(granted), {
+    jar.set(SESSION_COOKIE, await makeSessionValue(granted), {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
@@ -44,37 +53,67 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="wrap narrow">
-      <section className="stack">
-        <span className="eyebrow">로그인</span>
-        <h1>가족 로그인</h1>
-        <p className="lede">
-          가족에게 공유된 암호를 넣어주세요. 대부분의 자료는 로그인 없이도 보이지만, 가족만 볼 수
-          있게 잠근 자료가 있습니다.
-        </p>
-      </section>
-
-      {role !== 'visitor' && (
-        <div className="callout">
-          이미 {role === 'admin' ? '관리자' : '가족'}으로 로그인되어 있습니다.
+    <main className="gate">
+      <div className="gate-card">
+        <div className="gate-head">
+          <span className="gate-mark">
+            <IconHeart size={16} />
+          </span>
+          <h1>도당동 아카이브</h1>
+          <span className="gate-version">{VERSION_LABEL}</span>
         </div>
-      )}
 
-      {error && <div className="callout err">암호가 맞지 않습니다.</div>}
+        <div className="rule" />
 
-      <form action={login} className="box stack">
-        <input type="hidden" name="next" value={next ?? '/'} />
-        <div className="field">
-          <label htmlFor="password">암호</label>
-          <input id="password" name="password" type="password" autoComplete="current-password" autoFocus />
-          <span className="hint">관리자 암호를 넣으면 관리 화면까지 열립니다.</span>
-        </div>
-        <div className="row">
-          <button type="submit" className="btn">
+        {error && (
+          <div className="callout err" role="alert">
+            아이디 또는 비밀번호가 맞지 않습니다.
+          </div>
+        )}
+
+        <form action={login} className="stack">
+          <input type="hidden" name="next" value={next ?? '/'} />
+
+          <div className="field">
+            <label htmlFor="username">아이디</label>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="password">비밀번호</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+          </div>
+
+          <button type="submit" className="btn" style={{ justifyContent: 'center' }}>
             들어가기
           </button>
+        </form>
+
+        <div className="gate-note">
+          <IconLock size={10} />
+          <span>
+            {familyOpen
+              ? '가족 계정으로 들어오면 가족 공개 자료까지 보입니다.'
+              : '지금은 관리자만 들어올 수 있습니다. 가족 계정은 준비되는 대로 엽니다.'}
+          </span>
         </div>
-      </form>
+      </div>
     </main>
   );
 }

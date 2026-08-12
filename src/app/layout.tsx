@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { currentRole } from '@/lib/access';
 import { IconHeart } from '@/components/icons';
 import './globals.css';
@@ -28,11 +29,14 @@ const NAV = [
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const role = await currentRole();
+  // 문 앞 화면에서는 상단 머리글을 두지 않는다. 이름·버전·로그인 창만 남긴다.
+  const pathname = (await headers()).get('x-pathname') ?? '';
+  const bare = pathname === '/login';
 
   return (
     <html lang="ko" className={galmuri.variable}>
       <body>
-        {role === 'admin' && (
+        {!bare && role === 'admin' && (
           <div className="adminbar">
             <div className="adminbar-inner">
               <span>관리자로 접속 중</span>
@@ -46,6 +50,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
         )}
 
+        {!bare && (
         <header className="sitehead">
           <div className="sitehead-inner">
             <Link href="/" className="brand">
@@ -68,6 +73,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             ) : null}
           </div>
         </header>
+        )}
 
         {children}
       </body>
