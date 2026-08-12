@@ -24,6 +24,7 @@ export {
   lockLabel,
   makeSessionValue,
   roleForCredentials,
+  safeNextPath,
   familyLoginEnabled,
   ACCESS_LABELS,
   SESSION_COOKIE,

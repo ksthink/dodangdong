@@ -59,9 +59,13 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ fileId: st
   return new Response(blob.stream(), {
     headers: {
       'Content-Type': file.mime ?? 'application/octet-stream',
-      // 등급에 따라 캐시가 달라진다. 공개 자료만 공유 캐시를 허용한다.
-      'Cache-Control':
-        item.access_level === 'public' ? 'public, max-age=3600' : 'private, no-store',
+      // 사이트 전체가 로그인 뒤에 있으므로 공유 캐시에 남기지 않는다.
+      // 자료의 접근 등급이 'public' 이더라도 그것은 "로그인한 사람 모두"라는
+      // 뜻이지 "누구나"가 아니다. CDN 이 대신 내주는 일이 없게 한다.
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+      // 브라우저가 내용을 추측해 실행하지 않도록 표시만 하고 끝낸다.
+      'Content-Disposition': 'inline',
     },
   });
 }

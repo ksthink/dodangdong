@@ -1,13 +1,20 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import {
   roleForCredentials,
   makeSessionValue,
   familyLoginEnabled,
+  safeNextPath,
   SESSION_COOKIE,
   SESSION_MAX_AGE,
   currentRole,
 } from '@/lib/access';
+import {
+  clientIp,
+  checkLoginAllowed,
+  recordLoginAttempt,
+  LOGIN_WINDOW_MINUTES,
+} from '@/lib/login-guard';
 import { VERSION_LABEL } from '@/lib/version';
 import { IconHeart, IconLock } from '@/components/icons';
 
@@ -26,7 +33,7 @@ export default async function LoginPage({
 }) {
   const { error, next } = await searchParams;
   const role = await currentRole();
-  if (role !== 'visitor') redirect(next && next.startsWith('/') ? next : '/');
+  if (role !== 'visitor') redirect(safeNextPath(next));
 
   const familyOpen = familyLoginEnabled();
 
@@ -34,9 +41,18 @@ export default async function LoginPage({
     'use server';
     const username = String(formData.get('username') ?? '');
     const password = String(formData.get('password') ?? '');
-    const target = String(formData.get('next') ?? '/');
+    const target = safeNextPath(String(formData.get('next') ?? '/'));
+    const ip = clientIp(await headers());
+
+    // 같은 주소에서 실패가 쌓였으면 잠시 막는다.
+    const guard = await checkLoginAllowed(ip);
+    if (guard.blocked) {
+      redirect(`/login?error=locked&next=${encodeURIComponent(target)}`);
+    }
 
     const granted = roleForCredentials(username, password);
+    await recordLoginAttempt(ip, username, granted !== null);
+
     if (!granted) {
       redirect(`/login?error=1&next=${encodeURIComponent(target)}`);
     }
@@ -49,7 +65,7 @@ export default async function LoginPage({
       maxAge: SESSION_MAX_AGE,
       path: '/',
     });
-    redirect(target.startsWith('/') ? target : '/');
+    redirect(target);
   }
 
   return (
@@ -65,14 +81,18 @@ export default async function LoginPage({
 
         <div className="rule" />
 
-        {error && (
+        {error === 'locked' ? (
+          <div className="callout err" role="alert">
+            로그인 시도가 너무 많습니다. {LOGIN_WINDOW_MINUTES}분 뒤에 다시 시도해 주세요.
+          </div>
+        ) : error ? (
           <div className="callout err" role="alert">
             아이디 또는 비밀번호가 맞지 않습니다.
           </div>
-        )}
+        ) : null}
 
         <form action={login} className="stack">
-          <input type="hidden" name="next" value={next ?? '/'} />
+          <input type="hidden" name="next" value={safeNextPath(next)} />
 
           <div className="field">
             <label htmlFor="username">아이디</label>

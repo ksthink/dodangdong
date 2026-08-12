@@ -108,6 +108,22 @@ export function familyLoginEnabled(): boolean {
   return Boolean(process.env.FAMILY_USERNAME && process.env.FAMILY_PASSWORD);
 }
 
+/**
+ * 로그인 뒤 돌아갈 곳을 안전하게 고른다.
+ *
+ * "/" 로 시작하는지만 보면 부족하다 — "//evil.example.com" 도 슬래시로 시작하지만
+ * 브라우저는 이를 프로토콜 상대 URL 로 읽어 외부 사이트로 나간다. 우리 사이트로
+ * 돌려보내는 척하며 남의 로그인 화면에 떨어뜨리는 데 쓰이는 고전적인 수법이다.
+ */
+export function safeNextPath(next: string | null | undefined, fallback = '/'): string {
+  if (!next) return fallback;
+  // 경로 하나여야 한다. //host, /\host, 스킴이 붙은 것은 전부 거른다.
+  if (!next.startsWith('/')) return fallback;
+  if (next.startsWith('//') || next.startsWith('/\\')) return fallback;
+  if (next.includes('\\')) return fallback;
+  return next;
+}
+
 /** 이 등급의 자료를 이 역할이 볼 수 있는가. */
 export function canView(level: AccessLevel | null | undefined, role: Role): boolean {
   const l = level ?? 'family';
