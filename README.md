@@ -9,6 +9,8 @@
 
 기술 표준은 **더블린 코어(DCMI Metadata Terms)** 입니다.
 
+**운영 중** — https://dodangdong.vercel.app · 사이트 전체가 로그인 뒤에 있습니다.
+
 ---
 
 ## 목차
@@ -17,11 +19,11 @@
 - [기술 계층 — 묶음이 먼저, 낱장은 상속](#기술-계층--묶음이-먼저-낱장은-상속)
 - [필드 설계](#필드-설계)
 - [데이터 모델](#데이터-모델)
-- [접근 통제](#접근-통제)
+- [저장소 — 원본은 Drive, 축소본은 Supabase](#저장소--원본은-drive-축소본은-supabase)
+- [보안](#보안)
 - [보존 정책](#보존-정책)
 - [화면](#화면)
 - [실행](#실행)
-- [클라우드 Supabase 로 옮기기](#클라우드-supabase-로-옮기기)
 - [배포](#배포)
 - [코드 지도](#코드-지도)
 - [아직 안 한 것](#아직-안-한-것)
@@ -53,8 +55,6 @@ DCMES 15개 요소(title, creator, date…)만으로는 **"찍힌 시점"과 "�
 
 ### 더블린 코어가 감당하지 못하는 두 가지
 
-가족 기록에서는 반드시 생기는 문제인데, DC 만으로는 표현할 수 없습니다.
-
 **1. 불확실한 날짜 → EDTF 채택**
 
 "1958년 4월 12일"과 "1958년쯤"과 "1950년대"를 같은 칸에 넣으면 **셋 다 거짓이 됩니다.**
@@ -78,10 +78,8 @@ DCMES 15개 요소(title, creator, date…)만으로는 **"찍힌 시점"과 "�
 
 **2. 인물 동일성 → 자체 전거(authority) 목록**
 
-`dcterms:creator` 나 `dcterms:subject` 에 이름을 문자열로 적으면
-**"할머니 / 김순덕 / 어머니"가 서로 다른 사람이 됩니다.** 인물 테이블을 따로 두고 ID 로
-연결하며, 부르던 호칭은 `aliases` 로 함께 보관합니다. 어느 이름으로 검색해도 같은 사람에
-닿습니다.
+이름을 문자열로 적으면 **"할머니 / 김순덕 / 어머니"가 서로 다른 사람이 됩니다.** 인물
+테이블을 따로 두고 ID 로 연결하며, 부르던 호칭은 `aliases` 로 함께 보관합니다.
 
 ### 표준을 쓰되, 표준에 갇히지 않기
 
@@ -97,23 +95,22 @@ DCMES 15개 요소(title, creator, date…)만으로는 **"찍힌 시점"과 "�
 ## 기술 계층 — 묶음이 먼저, 낱장은 상속
 
 수천 장을 한 장씩 기술하는 건 현실적으로 불가능합니다. 원본이 놓여 있던 단위를 먼저
-기술하고, 낱장은 그 값을 물려받은 뒤 필요한 것만 덧씁니다.
-
-기록학의 **다층 기술(multi-level description)** 원칙 그대로이며, 더블린 코어에서는
-`dcterms:isPartOf` 로 계층을 표현합니다.
+기술하고, 낱장은 그 값을 물려받은 뒤 필요한 것만 덧씁니다. 기록학의 **다층
+기술(multi-level description)** 원칙 그대로이며, 더블린 코어에서는 `dcterms:isPartOf` 로
+계층을 표현합니다.
 
 ```
 acquisition   수집 세션 — 언제, 누구 집에서, 무엇을 받아왔나
    └ bundle   원본 묶음 — 앨범 한 권, 필름 한 롤, 테이프 하나, 편지 한 다발
        │        출처 · 입수경위 · 장소 · 권리 · 기본 접근등급을 여기서 한 번만 입력
        └ item  낱장 — 상속 필드가 NULL 이면 "물려받는 중"
-           └ file  파일 실체 — 원본 / 화면용 / 썸네일
+           └ file  파일 실체 — 원본(Drive) / 화면용 · 썸네일(Supabase)
 ```
 
 ### 상속 규칙은 한 곳에만 있다
 
 `item_effective` 뷰가 `coalesce(item.x, bundle.x)` 로 값을 펼치고, **화면과 내보내기는 전부
-이 뷰만 봅니다.** 상속 로직이 여러 곳에 흩어지면 반드시 어긋나기 때문입니다.
+이 뷰만 봅니다.** 상속 로직이 여러 곳에 흩어지면 반드시 어긋납니다.
 
 ```sql
 coalesce(i.source, b.source)                     as source,
@@ -128,9 +125,6 @@ coalesce(i.access_level, b.default_access_level) as access_level,
 이 설계의 실익은 여기서 나옵니다. **묶음 정보를 나중에 고치면, 상속받던 낱장만 갱신되고
 직접 입력한 낱장은 건드려지지 않습니다.**
 
-관리자 화면에서는 상속 필드를 비워두면 묶음 값이 placeholder 로 흐리게 보입니다 —
-빈 칸이 곧 "상속 중"이라는 뜻입니다. 열람 화면에서는 `(묶음에서 상속)` 으로 표시됩니다.
-
 ### 묶음과 모음집은 다르다
 
 | | 묶음 (bundle) | 모음집 (collection) |
@@ -139,11 +133,6 @@ coalesce(i.access_level, b.default_access_level) as access_level,
 | 성격 | 출처 계층 (물리적) | 주제 큐레이션 (지적) |
 | 소속 | 자료 하나는 묶음 **하나**에만 | 자료 하나가 모음집 **여럿**에 |
 | 예 | "큰아버지 앨범 3권" | "초량시장 가게 앞에서" |
-
-### 선별해서 깊게
-
-관리자가 `is_featured` 로 표시한 자료만 인물 태그·설명·전사를 채웁니다. 나머지는 묶음 맥락
-안에서 볼 수 있으면 충분합니다. 연표에서는 대표 자료가 그 연도의 얼굴로 올라옵니다.
 
 ---
 
@@ -167,18 +156,13 @@ coalesce(i.access_level, b.default_access_level) as access_level,
 | 매체 | `dcterms:medium` | 선택 | 흑백 인화지 |
 | 크기·길이 | `dcterms:extent` | 선택 | 89×127mm · 08분 12초 |
 | 파일 형식 | `dcterms:format` | 자동 | image/jpeg · 4032×3024 |
-| 언어 | `dcterms:language` | 선택 | ko |
 | 본문·전사 | `dcterms:tableOfContents` | 권장 | 전사문, 편지 판독문 |
-| 소속 모음집 | `dcterms:isPartOf` | 선택 | → 모음집 참조 |
-| 등록일 | `dcterms:dateSubmitted` | 자동 | |
-| 최종 수정 | `dcterms:modified` | 자동 | |
+| 등록일 · 최종 수정 | `dcterms:dateSubmitted` · `modified` | 자동 | |
 
 ### 낱장에서 사람이 손으로 채우는 건 사실상 "시기" 하나
 
-필수가 다섯이지만 실제 입력 부담은 거의 없습니다.
-
 - **유형** — 파일에서 판별 (`mimeFor` → `dcmiTypeFor`)
-- **소속 묶음** — 폴더째 올릴 때 한 번에 지정
+- **소속 묶음** — 올릴 때 한 번에 지정
 - **접근 등급** — 묶음에서 상속
 - **제목** — `묶음명 + 일련번호` 로 자동 제안
 - **시기** — EXIF `DateTimeOriginal` 이 있으면 자동, 없으면 묶음의 시기 범위를 상속
@@ -186,120 +170,46 @@ coalesce(i.access_level, b.default_access_level) as access_level,
 필수 항목이 많으면 입력이 멈추고, 결국 **아무것도 기술되지 않은 파일 더미**가 남습니다.
 그것이 아카이브가 실패하는 가장 흔한 방식입니다.
 
-### 출처를 낱장에서 권장으로 둔 이유
-
-원본 소장자를 모르는 자료가 섞여 있어 낱장 필수로 두면 입력이 막힙니다. 대신 **묶음에서는
-필수**입니다 — 방문 수집이라 "어느 집 어느 앨범에서 나왔는지"는 묶음 만들 때 확실히 알 수
-있고, 낱장은 상속받으므로 결과적으로 대부분의 자료에 출처가 남습니다.
-
 ---
 
 ## 데이터 모델
 
-전체 정의는 [`supabase/migrations/`](supabase/migrations/) 에 있습니다.
+전체 정의는 [`supabase/migrations/`](supabase/migrations/), 한 파일로 묶은 것은
+[`scripts/schema.sql`](scripts/schema.sql).
 
-| 테이블 | 역할 | 주요 컬럼 |
-| --- | --- | --- |
-| `acquisition` | 수집 세션 | `visited_on` · `from_person_id` · `location` · `note` |
-| `bundle` | 원본 묶음 | `title` · `kind` · **`source`(필수)** · `provenance` · `place_id` · `rights` · `default_access_level` · `period_edtf` |
-| `item` | 낱장 | `identifier` · `title` · `type` · `created_edtf` · 상속 필드(NULL 가능) · `is_featured` |
-| `file` | 파일 실체 | `role` · `storage_path` · `checksum_sha256` · `exif` · `original_filename` |
-| `person` | 인물 전거 | `display_name` · `aliases[]` · `relation_to_root` |
-| `place` | 장소 전거 | `family_name` · `admin_name` |
-| `item_person` | 자료↔인물 | `role` (찍힘/찍음/씀/받음/말함/언급됨) |
-| `collection` | 주제 모음집 | `title` · `kind` · `cover_item_id` |
-| `item_collection` | 자료↔모음집 | 다대다 |
-| `transcript` | 전사 | `segments[]` · `full_text` · `reviewed` |
-| `event_log` | 수정 이력 | `action` · `before` · `after` |
-| `item_effective` | **뷰** | 상속을 펼친 결과 — 모든 조회가 여기를 본다 |
+| 테이블 | 역할 |
+| --- | --- |
+| `acquisition` | 수집 세션 — 언제 누구에게서 받아왔나 |
+| `bundle` | 원본 묶음 — 출처(필수)·권리·기본 접근등급·Drive 폴더 |
+| `item` | 낱장 — 상속 필드는 NULL 이면 물려받는 중 |
+| `file` | 파일 실체 — provider(gdrive/supabase)·체크섬·EXIF |
+| `person` · `place` | 인물·장소 전거 |
+| `item_person` | 자료↔인물 (찍힘/찍음/씀/받음/말함/언급됨) |
+| `collection` · `item_collection` | 주제 모음집 (다대다) |
+| `transcript` | 전사 — 구간별 텍스트, 교정 여부 |
+| `event_log` | 수정 이력 (before/after) |
+| `login_attempt` | 접속 시도 — 무차별 대입 방어와 접속 이력 |
+| `admin_totp` | 2단계 인증 설정 (한 행) |
+| `app_setting` | Google 리프레시 토큰 등 |
+| `item_effective` | **뷰** — 상속을 펼친 결과. 모든 조회가 여기를 본다 |
 
 ### 왜 세 겹으로 나눴나
 
-`bundle` / `item` / `file` 은 각각 다른 질문에 답합니다.
-
-- `bundle` — 이게 어디서 나왔나
-- `item` — 이게 무엇인가
-- `file` — 실제 바이트가 어디 있나
-
-편지 한 통이 스캔 이미지 세 장이고, 인터뷰 한 편이 원본 영상 + 변환본 + 추출 음성으로
-존재합니다. **"자료 한 건"과 "파일 한 개"를 같은 것으로 두면 이 경우마다 구조가 깨집니다.**
-
-### 통제 어휘
-
-자유 입력을 막는 곳은 네 군데입니다.
-
-1. **자료 유형** — DCMI Type Vocabulary (PostgreSQL enum 으로 고정)
-2. **인물** — 전거 테이블, 별칭 함께 보관
-3. **장소** — 가족만 아는 이름(`family_name`)과 행정 지명(`admin_name`)을 한 쌍으로
-4. **접근 등급** — 세 단계만. 늘어나면 관리자가 판단을 미루고 전부 기본값으로 들어갑니다
-
----
-
-## 접근 통제
-
-### 세 등급
-
-| 등급 | 볼 수 있는 사람 |
-| --- | --- |
-| `public` | 링크를 아는 누구나 |
-| `family` | 로그인한 가족 (**새 자료의 기본값**) |
-| `private` | 관리자만 |
-
-공개는 관리자가 **명시적으로 올릴 때만** 됩니다. 기본값이 곧 대부분의 자료가 되기 때문입니다.
-
-### 잠긴 자료를 다루는 두 원칙
-
-이 둘은 함께 갑니다.
-
-1. **무엇을 못 보고 있는지는 알 수 있어야 한다.** 그래서 목록에서 지우지 않고 자리를 남깁니다.
-2. **볼 수 없는 자료의 내용은 새어나가면 안 된다.** 제목과 설명도 내용입니다.
-
-"가계부에 끼워져 있던 쪽지" 같은 제목은 그 자체로 사적인 정보입니다. 그래서 볼 수 없는
-자료는 **제목·설명·묶음명·툴팁·썸네일까지 전부 가리고** 자물쇠와 자리만 남깁니다.
-구현은 [`src/lib/mask.ts`](src/lib/mask.ts).
-
-### 로그인은 공유 암호 하나
-
-가족마다 계정을 만들지 않습니다. 어르신이 쓰실 수 있어야 하고, 실제 위험은 "누가 봤는지
-모르는 것"이 아니라 **"아무도 못 들어오는 것"** 입니다. 관리자 암호를 넣으면 관리 화면까지
-열립니다. 세션은 HMAC 서명 쿠키이고, 위조하면 방문자로 떨어집니다.
-
-### 방어선
-
-- DB·스토리지 접근은 **전부 서버에서 secret key 로만** 이루어집니다. 브라우저에는 어떤 키도
-  내려가지 않습니다.
-- 모든 테이블에 **RLS 가 켜져 있고 정책이 없습니다.** 키가 새어나가도 직접 읽히지 않습니다.
-  `anon` / `authenticated` 역할의 권한은 명시적으로 회수했습니다.
-- 스토리지 버킷 둘 다 비공개입니다. 파일은 `/media/[fileId]` 를 거쳐야만 나가고, 이 경로가
-  등급을 확인한 뒤 **서버가 직접 흘려보냅니다.** 서명 URL 을 브라우저에 넘기지 않습니다 —
-  넘기는 순간 그 주소가 그대로 유출될 수 있기 때문입니다.
-- **원본은 관리자만** 받을 수 있습니다. 가족에게는 축소본만 나갑니다. 축소본도 자료입니다.
-- 공개 자료만 공유 캐시(`public, max-age`)를 허용하고, 나머지는 `private, no-store` 입니다.
-
-검증한 결과입니다.
-
-| | 방문자 | 가족 | 관리자 |
-| --- | --- | --- | --- |
-| 공개 자료 이미지 | 200 | 200 | 200 |
-| 가족 자료 이미지 | 403 | 200 | 200 |
-| 비공개 자료 이미지 | 403 | 403 | 200 |
-| 원본 파일 | 403 | 403 | 200 |
-| `POST /api/upload` | 403 | 403 | 동작 |
-| 위조 쿠키로 `/admin` | 로그인으로 리다이렉트 | | |
+`bundle` / `item` / `file` 은 각각 다른 질문에 답합니다 — "어디서 나왔나", "무엇인가",
+"실제 바이트가 어디 있나". 편지 한 통이 스캔 이미지 세 장이고, 인터뷰 한 편이 원본 영상 +
+변환본 + 추출 음성으로 존재합니다. **"자료 한 건"과 "파일 한 개"를 같은 것으로 두면 이
+경우마다 구조가 깨집니다.**
 
 ---
 
 ## 저장소 — 원본은 Drive, 축소본은 Supabase
-
-용량의 대부분을 차지하는 원본은 **Google Drive** 에, 갤러리에서 자주 읽히는 축소본만
-**Supabase** 에 둡니다.
 
 | | 원본 (스캔본·영상·음성) | 화면용 축소본 |
 | --- | --- | --- |
 | 어디에 | Google Drive | Supabase Storage |
 | 크기 | 수십 MB ~ 수 GB | 수십~수백 KB |
 | 읽히는 빈도 | 거의 없음 (관리자만) | 갤러리 한 화면에 수십 장 |
-| 왜 | 2TB 기준 Drive 가 Supabase 스토리지보다 훨씬 싸다 | 빠르게 나가야 하고 접근 등급 통제가 필요하다 |
+| 왜 | 2TB 기준 Drive 가 훨씬 싸다 | 빠르게 나가야 하고 등급 통제가 필요하다 |
 
 ### 업로드 경로 — 파일은 우리 서버를 거치지 않는다
 
@@ -315,31 +225,29 @@ coalesce(i.access_level, b.default_access_level) as access_level,
 
 이 구조라야 하는 이유가 둘 있습니다.
 
-1. **서버리스 요청 본문 제한을 피한다.** 버셀 함수는 요청 본문이 4.5MB 로 제한됩니다.
-   파일을 서버로 중계하면 600dpi 스캔본조차 올라가지 않습니다.
-2. **끊겨도 이어 올린다.** 재개 가능 업로드라 2GB 영상을 올리다 연결이 끊겨도 처음부터
-   다시 하지 않습니다.
+1. **서버리스 요청 본문 제한을 피한다.** 파일을 서버로 중계하면 큰 스캔본조차 올라가지
+   않습니다.
+2. **끊겨도 이어 올린다.** 2GB 영상을 올리다 연결이 끊겨도 처음부터 다시 하지 않습니다.
 
 ### 권한 범위는 `drive.file` 하나
 
 이 앱이 **만든 파일에만** 접근합니다. 관리자의 나머지 Drive 내용은 읽지도 쓰지도 못합니다.
 개인 자료를 다루는 도구가 가져야 할 최소 권한이고, Google 앱 심사도 필요 없습니다.
 
-리프레시 토큰은 환경변수가 아니라 DB(`app_setting`)에 둡니다. 배포 환경에서는 코드가
-환경변수를 바꿀 수 없으므로, 관리자가 **관리 화면 → 저장소 → Google Drive 연결** 로
-발급받은 결과를 저장할 곳이 필요하기 때문입니다.
+리프레시 토큰은 환경변수가 아니라 DB(`app_setting`)에 둡니다 — 배포 환경에서는 코드가
+환경변수를 바꿀 수 없으므로, **관리 → 저장소 → Google Drive 연결**의 결과를 저장할 곳이
+필요하기 때문입니다.
 
 ### 무결성 — 체크섬이 둘인 이유
 
 | | 누가 계산 | 언제 |
 | --- | --- | --- |
-| `checksum_sha256` | **우리 서버**가 직접 읽어서 | 이미지처럼 축소본을 만들려고 내려받는 파일 |
-| `checksum_md5` | Google Drive 가 | 모든 Drive 파일 (영상처럼 내려받지 않는 것 포함) |
+| `checksum_sha256` | **우리 서버**가 직접 읽어서 | 축소본을 만들려고 내려받는 이미지 |
+| `checksum_md5` | Google Drive 가 | 모든 Drive 파일 (영상 포함) |
 
 `checksum_verified` 는 **서버가 직접 확인했는가**를 뜻합니다. 영상은 서버 메모리로 감당할
 크기가 아니라 내려받지 않으므로 `false` 로 남고, 대신 Drive 의 md5 가 무결성 근거가 됩니다.
-"체크섬이 있다"와 "무결성이 확인됐다"를 구분하기 위한 표시이며, 관리 화면 → 저장소에서
-미확인 건수를 볼 수 있습니다.
+"체크섬이 있다"와 "무결성이 확인됐다"를 구분하기 위한 표시입니다.
 
 ### 부수 효과 — 서비스가 사라져도 자료는 남는다
 
@@ -348,19 +256,81 @@ coalesce(i.access_level, b.default_access_level) as access_level,
 
 ---
 
+## 보안
+
+### 두 겹의 문
+
+**1. 사이트 전체가 로그인 뒤에 있습니다.** 미들웨어가 모든 경로를 막습니다. `/media`(축소본
+이미지)도 포함합니다 — 축소본도 자료이므로 로그인 없이 나가면 안 됩니다.
+
+**2. 자료마다 걸린 접근 등급**이 그 안에서 한 번 더 거릅니다.
+
+| 등급 | 볼 수 있는 사람 |
+| --- | --- |
+| `public` | 로그인한 사람 모두 |
+| `family` | 가족 계정 이상 (**새 자료의 기본값**) |
+| `private` | 관리자만 |
+
+잠긴 자료는 목록에서 지우지 않되(무엇을 못 보고 있는지는 알 수 있어야 하므로),
+**제목·설명·묶음명·툴팁·썸네일을 전부 가립니다** — 제목도 내용이기 때문입니다.
+구현은 [`src/lib/mask.ts`](src/lib/mask.ts).
+
+### 2단계 인증 (TOTP)
+
+관리자 로그인은 아이디·비밀번호를 통과해도 **세션을 내주지 않습니다.** 5분짜리 대기 쪽지만
+주고 인증 앱 코드를 받습니다. 쪽지는 `pending:` 을 붙여 서명하므로, 세션 쿠키 자리에 그대로
+넣어도 방문자로 판정됩니다.
+
+- **등록은 코드를 한 번 맞혀야 완료됩니다.** 인증 앱에 제대로 들어가지 않았는데 켜지면
+  관리자가 자기 사이트에서 잠깁니다.
+- **QR 은 서버에서 그려 data URI 로** 넣습니다. 외부로 나가는 요청이 없습니다.
+- **복구 코드 10개**를 발급하고 원본은 그 화면에서 한 번만 보여줍니다. DB 에는 SHA-256
+  해시만 남고, 쓰면 목록에서 지웁니다.
+- **코드 재사용을 막습니다.** 마지막으로 쓴 시간대를 기록해 같은 코드를 두 번 못 쓰게
+  합니다. 시계 오차는 ±30초만 받습니다 — 더 넓히면 훔쳐본 코드의 수명도 함께 길어집니다.
+- **TOTP 비밀키는 암호화해 저장합니다.** `SESSION_SECRET` 에서 파생한 키로 AES-GCM.
+  DB 백업 하나가 새는 사고에서 2단계 인증이 함께 무너지지 않게 합니다.
+
+**관리 → 보안**에서 켜고/끄고, 복구 코드를 재발급하고, 최근 접속 시도를 볼 수 있습니다.
+
+### 무차별 대입 방어
+
+같은 주소에서 15분 내 10회 실패하면 차단합니다. 차단 중에는 올바른 비밀번호도 거부됩니다.
+성공하면 그 주소의 실패 기록을 지웁니다.
+
+의도적으로 **기록을 못 읽으면 막지 않습니다** — 잠금 장치가 고장 나서 아무도 못 들어오는
+쪽이 실제로는 더 흔한 사고입니다.
+
+### 그 밖의 방어선
+
+- DB·스토리지 접근은 **전부 서버에서 secret key 로만** 이루어집니다. 브라우저에는 어떤
+  키도 내려가지 않습니다.
+- 모든 테이블에 **RLS 가 켜져 있고 정책이 없습니다.** 키가 새어나가도 직접 읽히지 않습니다.
+  `anon` / `authenticated` 권한은 명시적으로 회수했습니다.
+- 스토리지 버킷 둘 다 비공개입니다. 파일은 `/media/[fileId]` 를 거쳐야만 나가고, 이 경로가
+  등급을 확인한 뒤 **서버가 직접 흘려보냅니다.** 서명 URL 을 브라우저에 넘기지 않습니다.
+- **원본은 관리자만** 받을 수 있습니다. 가족에게는 축소본만 나갑니다.
+- 미디어 응답은 전부 `private, no-store` 입니다. 등급이 `public` 이어도 그것은 "누구나"가
+  아니라 "로그인한 사람 모두"이므로, CDN 이 대신 내주지 않게 합니다.
+- **로그인 후 이동할 곳을 검증합니다.** `//evil.example.com` 처럼 슬래시로 시작하면서도
+  브라우저가 외부로 읽는 주소를 거릅니다 (`safeNextPath`).
+- 보안 헤더: CSP(`frame-ancestors 'none'`), `X-Frame-Options: DENY`, `nosniff`,
+  `Referrer-Policy`, `Permissions-Policy`, `X-Robots-Tag: noindex`.
+- 세션은 HMAC 서명 쿠키(`HttpOnly` · `Secure` · `SameSite=Lax`)입니다.
+
+---
+
 ## 보존 정책
 
-- **원본은 고치지 않는다.** 리사이즈·보정·이름변경 없이 그대로 `originals` 버킷에.
-  화면에 쓰는 것은 전부 파생물이며 언제든 원본에서 다시 만들 수 있습니다.
+- **원본은 고치지 않는다.** 리사이즈·보정·이름변경 없이 그대로 둡니다. 화면에 쓰는 것은
+  전부 파생물이며 언제든 원본에서 다시 만들 수 있습니다.
 - **화면용 사본은 항상 만든다.** 원본이 TIFF·HEIC 면 브라우저가 못 여는데, JPEG 사본이
   없으면 자료가 있어도 보이지 않는 상태가 됩니다.
-- **체크섬(SHA-256)** 을 적재 시 기록하고 `role = 'original'` 에 유일 색인을 겁니다.
-  여러 친척에게 같은 사진을 받는 일이 흔해서 실제로 자주 걸립니다.
-- **파일명에 의미를 담지 않는다.** 스토리지 키는 ASCII 만 허용되므로 경로는 기계적으로 짓고
-  (`{bundle}/{item}/original.jpg`), 업로드 당시 이름은 `file.original_filename` 에 기록으로
-  남깁니다.
-- **삭제는 없다.** `is_archived` 로 내려갈 뿐이고 파일은 그대로 남습니다. 잘못 지운 유일본을
-  되살릴 수 없는 상황을 구조적으로 막습니다.
+- **체크섬으로 중복을 막는다.** 여러 친척에게 같은 사진을 받는 일이 흔해서 실제로 자주
+  걸립니다.
+- **파일명에 의미를 담지 않는다.** 경로는 기계적으로 짓고, 업로드 당시 이름은
+  `file.original_filename` 에 기록으로 남깁니다.
+- **삭제는 없다.** `is_archived` 로 내려갈 뿐이고 파일은 그대로 남습니다.
 - **모든 수정은 `event_log` 에** before/after 로 남습니다.
 
 ---
@@ -368,29 +338,28 @@ coalesce(i.access_level, b.default_access_level) as access_level,
 ## 화면
 
 열람 화면은 따로 만든 것이 아니라 **기술이 제대로 되어 있으면 따라 나오는 결과물**입니다.
-어느 화면이 어느 필드에서 나오는지가 곧 그 필드를 채우는 이유입니다.
 
 | 경로 | 내용 | 근거 필드 |
 | --- | --- | --- |
+| `/login` | 문 앞 — 이름 · 버전 · 로그인 창 | |
+| `/login/verify` | 2단계 인증 코드 | |
 | `/` | 연표 | `dcterms:created` (EDTF) |
 | `/item/[id]` | 자료 상세 — 상속값은 `(묶음에서 상속)` 표시 | 전부 |
 | `/gallery` | 유형별 갤러리 | `dcterms:type` |
 | `/collections` | 이야기 모음집 | `dcterms:isPartOf` |
 | `/people` · `/people/[id]` | 인물 전거와 그 사람의 자료 | `dcterms:subject` |
-| `/login` · `/logout` | 가족·관리자 로그인 | |
-| `/media/[fileId]` | 등급 확인 후 파일 스트리밍 | `dcterms:accessRights` |
+| `/media/[fileId]` | 등급 확인 후 파일 전달 | `dcterms:accessRights` |
 
-관리자 화면은 4단계 작업 흐름 그대로입니다.
-
-| 경로 | 단계 | 내용 |
+| 관리 경로 | 단계 | 내용 |
 | --- | --- | --- |
 | `/admin` | — | **작업 대기열** — "무엇이 아직 기술되지 않았는가" |
 | `/admin/acquisitions` | 1단계 | 수집 세션 기록 |
 | `/admin/bundles/new` | 2단계 | 묶음 만들고 기술 |
-| `/admin/bundles/[id]` | 3·4단계 | 폴더째 적재 · 일괄 편집 · 낱장 목록 |
+| `/admin/bundles/[id]` | 3·4단계 | 업로드 · 일괄 편집 · 낱장 목록 |
 | `/admin/items/[id]` | 선별 | 상세 기술 · 인물/모음집 연결 |
-| `/admin/people` | — | 인물 전거 관리 |
-| `/admin/collections` | — | 모음집 관리 |
+| `/admin/people` · `/admin/collections` | — | 전거·모음집 관리 |
+| `/admin/storage` | — | Google Drive 연결, 저장소 현황 |
+| `/admin/security` | — | 2단계 인증, 접속 이력 |
 
 관리자 첫 화면이 대시보드가 아니라 **작업 대기열**인 이유는, 남아 있는 미기술 자료가 곧
 이 아카이브의 진짜 진행률이기 때문입니다.
@@ -401,17 +370,15 @@ coalesce(i.access_level, b.default_access_level) as access_level,
 
 ### 필요한 것
 
-- Node.js **22 이상 권장** (20 에서도 동작하나 아래 주의 참고)
+- Node.js **22 이상 권장**
 - Docker (로컬 Supabase 스택용)
 
-### 1. 로컬 Supabase 띄우기
+### 1. 로컬 Supabase
 
 ```bash
 npx supabase start
 npx supabase db reset --no-seed   # 마이그레이션 적용
 ```
-
-출력에 나오는 `API_URL` 과 `SECRET_KEY` 를 다음 단계에서 씁니다.
 
 ### 2. 환경 변수
 
@@ -423,9 +390,16 @@ cp .env.example .env.local
 SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_SECRET_KEY=<supabase start 출력의 SECRET_KEY>
 SESSION_SECRET=<openssl rand -base64 32>
-ADMIN_PASSWORD=<관리자 암호>
-FAMILY_PASSWORD=<가족 공유 암호>
+ADMIN_USERNAME=<관리자 아이디>
+ADMIN_PASSWORD="<관리자 비밀번호>"
 ```
+
+> **`#` 이 든 값은 반드시 따옴표로 감쌀 것.** 감싸지 않으면 dotenv 가 그 뒤를 주석으로
+> 잘라내 비밀번호가 조용히 짧아집니다. (Vercel 대시보드에 넣는 값은 그대로 저장되므로
+> 따옴표가 필요 없습니다.)
+
+`FAMILY_USERNAME` / `FAMILY_PASSWORD` 를 채우면 가족 로그인이 열립니다. 비워두면 관리자만
+들어올 수 있습니다.
 
 ### 3. 개발 서버
 
@@ -434,126 +408,73 @@ npm install
 npm run dev            # 0.0.0.0:8443
 ```
 
-localhost 아닌 주소로 접속한다면 허용 호스트를 알려줘야 합니다.
+localhost 아닌 주소로 접속한다면 `DEV_ORIGINS=203.0.113.10` 처럼 허용 호스트를 알려줘야
+합니다.
 
-```ini
-DEV_ORIGINS=203.0.113.10,archive.example.kr
-```
-
-### 4. 표본 자료 넣어보기 (선택)
-
-DB 에 행을 직접 꽂지 않고 **실제 적재 경로(`/api/upload`)를 그대로 통과**시켜 자료 19건을
-만듭니다. 파이프라인이 실제로 도는지 확인하는 용도이기도 합니다.
+### 4. 표본 자료 (선택)
 
 ```bash
 npm run seed
 ```
 
-묶음 4개(앨범·가게 사진·구술 인터뷰·편지 다발), 인물 4명, 모음집 2개가 생기고, 등급이
-공개 6 / 가족 12 / 비공개 1 로 섞여 들어갑니다. 상속과 잠금이 어떻게 보이는지 확인할 수
-있습니다.
+묶음 4개, 자료 19건, 인물 4명, 모음집 2개가 생기고 등급이 섞여 들어갑니다.
+운영 적재는 Drive 경유지만, 시드는 Drive 연결 없이 돌도록 Supabase 원본 경로를 씁니다.
 
-> **주의** — 시드 스크립트는 기존 자료를 **전부 지우고** 다시 만듭니다. 실제 자료가 들어간
-> 뒤에는 실행하지 마세요.
-
-> **Node 20 주의** — `@supabase/supabase-js` 가 native WebSocket 을 요구합니다.
-> `npm run seed` 는 `--experimental-websocket` 플래그를 붙여 실행하도록 되어 있습니다.
-> Node 22 이상에서는 필요 없습니다.
+> **주의** — 시드는 기존 자료를 **전부 지우고** 다시 만듭니다. 실제 자료가 들어간 뒤에는
+> 실행하지 마세요.
 
 ---
 
-## 클라우드 Supabase 로 옮기기
+## 배포
 
-코드는 그대로 두고 `.env.local` 두 줄만 바꾸면 됩니다.
+### 1. Supabase 클라우드
 
-1. Supabase 대시보드에서 프로젝트 생성
-2. Project Settings → API 에서 **Project URL** 과 **secret(service_role) key** 복사
-3. `.env.local` 의 `SUPABASE_URL`, `SUPABASE_SECRET_KEY` 교체
-4. 마이그레이션 적용
-
-```bash
-npx supabase link --project-ref <ref>
-npx supabase db push
-```
-
-`SESSION_SECRET` 은 배포 시 반드시 새로 만드세요. 바꾸면 기존 로그인 세션이 전부 무효가
-됩니다.
-
----
-
-## 배포 (Vercel)
-
-### 1. Supabase 클라우드 프로젝트
-
-리전은 **Northeast Asia (Seoul)** 을 고른다. 버셀 함수도 `icn1` 에 두므로 왕복이 짧아진다.
-
-스키마 적용은 둘 중 하나.
-
-```bash
-npx supabase link --project-ref <ref>
-npx supabase db push
-```
-
-CLI 를 쓰기 어려우면 [`scripts/schema.sql`](scripts/schema.sql) 을 대시보드 SQL Editor 에
-통째로 붙여넣는다. 마이그레이션을 순서대로 이어붙인 파일이다.
+리전은 **Northeast Asia (Seoul)**. 스키마는 `npx supabase db push` 또는
+[`scripts/schema.sql`](scripts/schema.sql) 을 대시보드 SQL Editor 에 붙여넣습니다.
 
 ### 2. Google OAuth 클라이언트
 
-1. Google Cloud Console → 새 프로젝트 → **Google Drive API 사용 설정**
-2. OAuth 동의 화면 → 외부 → 범위에 `.../auth/drive.file` 추가
+1. Google Cloud Console → **Google Drive API 사용 설정**
+2. OAuth 동의 화면 → 외부 → 범위에 `.../auth/drive.file` → **프로덕션으로 게시**
+   (테스트 모드는 리프레시 토큰이 7일마다 만료됩니다)
 3. 사용자 인증 정보 → OAuth 클라이언트 ID → **웹 애플리케이션**
-4. 승인된 리디렉션 URI:
-   ```
-   https://<배포주소>/api/google/callback
-   http://localhost:8443/api/google/callback
-   ```
+4. 승인된 리디렉션 URI: `https://<배포주소>/api/google/callback`
 
-동의 화면에서 뜨는 **"확인되지 않은 앱"** 경고는 정상이다. 본인이 만든 앱이라 Google 목록에
-없을 뿐이며, 고급 → 이동으로 통과한다. 관리자 한 명만 거치면 되는 절차다.
-
-### 3. 버셀 환경변수
-
-프로젝트 설정 → Environment Variables 에 다음을 넣는다. `DEV_ORIGINS` 는 필요 없다.
+### 3. 환경변수
 
 | 이름 | 값 |
 | --- | --- |
-| `SUPABASE_URL` | 클라우드 Project URL |
-| `SUPABASE_SECRET_KEY` | secret / service_role key |
+| `SUPABASE_URL` · `SUPABASE_SECRET_KEY` | 클라우드 프로젝트 |
 | `SESSION_SECRET` | `openssl rand -base64 32` 로 **새로** 생성 |
-| `ADMIN_PASSWORD` | 관리자 암호 |
-| `FAMILY_PASSWORD` | 가족 공유 암호 |
-| `GOOGLE_CLIENT_ID` | OAuth 클라이언트 ID |
-| `GOOGLE_CLIENT_SECRET` | OAuth 클라이언트 시크릿 |
+| `ADMIN_USERNAME` · `ADMIN_PASSWORD` | 관리자 계정 |
+| `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` | OAuth 클라이언트 |
+
+`SESSION_SECRET` 을 바꾸면 기존 세션이 전부 무효가 되고, **암호화해 둔 TOTP 비밀키도 열리지
+않습니다.** 2단계 인증을 다시 등록해야 합니다.
 
 ### 4. 배포 후
 
-관리자로 로그인 → **관리 → 저장소 → Google Drive 연결**. 이때 발급된 리프레시 토큰이
-`app_setting` 테이블에 저장되고, 그때부터 업로드가 가능해진다.
+1. 관리자로 로그인 → **관리 → 보안 → 2단계 인증 켜기**
+2. **관리 → 저장소 → Google Drive 연결**
 
 ### 서버리스에서 주의할 점
 
-- **요청 본문 4.5MB 제한** — 파일이 서버를 거치지 않는 구조라 해당 없다. 다만 이 제약이
-  업로드 설계를 정한 이유이므로, 서버로 파일을 받는 코드를 새로 만들지 말 것.
-- **함수 실행 시간** — 색인(`/api/upload/register`)은 이미지를 내려받아 축소본을 만든다.
-  `maxDuration = 60` 으로 두었고, 60MB 넘는 이미지는 축소본을 포기하고 원본만 남긴다.
-- **원본 스트리밍 안 함** — 수 GB 영상을 함수가 중계하면 시간·메모리를 감당하지 못한다.
-  원본 요청은 Drive 화면으로 보낸다 (관리자만 도달).
+- **요청 본문 크기 제한** — 파일이 서버를 거치지 않는 구조라 해당 없습니다. 다만 이 제약이
+  업로드 설계를 정한 이유이므로, 서버로 파일을 받는 코드를 새로 만들지 마세요.
+- **함수 실행 시간** — 색인은 이미지를 내려받아 축소본을 만듭니다. `maxDuration = 60`,
+  60MB 넘는 이미지는 축소본을 포기하고 원본만 남깁니다.
+- **원본 스트리밍 안 함** — 수 GB 영상을 함수가 중계하면 버팁니다. 원본 요청은 Drive
+  화면으로 보냅니다 (관리자만 도달).
 
 ### 직접 호스팅할 때
 
 ```bash
-npm run build
-npm run start          # 127.0.0.1:8443
+npm run build && npm run start     # 127.0.0.1:8443
 ```
 
-**HTTPS 없이 외부에 공개하지 말 것.** 로그인 암호가 평문으로 흐른다. `NODE_ENV=production`
-에서는 세션 쿠키에 `secure` 플래그가 붙으므로 HTTPS 가 없으면 로그인이 유지되지도 않는다.
-
-```
-archive.example.kr {
-    reverse_proxy 127.0.0.1:8443
-}
-```
+**HTTPS 없이 외부에 공개하지 마세요.** 로그인 정보가 평문으로 흐릅니다.
+`NODE_ENV=production` 에서는 세션 쿠키에 `secure` 플래그가 붙으므로 HTTPS 가 없으면
+로그인이 유지되지도 않습니다.
 
 ---
 
@@ -561,27 +482,30 @@ archive.example.kr {
 
 ```
 src/
+  middleware.ts    문 앞 — 모든 경로를 로그인 뒤에 둔다
   lib/
-    edtf.ts        EDTF 파싱 · 한국어 표기 · 정렬 범위 유도
-    access.ts      역할 판정 · 세션 서명 · canView
+    session.ts     세션 서명·검증, 자격 판정, safeNextPath (Web Crypto)
+    access.ts      요청 맥락에서 역할 읽기
+    totp.ts        TOTP (RFC 6238) · base32 · otpauth URI
+    two-factor.ts  2단계 인증 등록·확인·복구 코드
+    crypto-box.ts  저장 전 봉인 (AES-GCM, SESSION_SECRET 파생 키)
+    login-guard.ts 무차별 대입 방어
+    edtf.ts        EDTF 파싱 · 한국어 표기 · 정렬 범위
     mask.ts        잠긴 자료의 제목·설명 가리기
+    drive.ts       Google Drive — OAuth, 업로드 세션, 폴더
+    ingest.ts      적재 — 체크섬 · EXIF · 축소본
+    queries.ts     열람 조회 — 전부 item_effective 뷰를 본다
     db.ts          서버 전용 Supabase 클라이언트
-    ingest.ts      적재 파이프라인 (체크섬 · EXIF · 축소본)
-    queries.ts     열람 화면 조회 — 전부 item_effective 뷰를 본다
-  components/
-    icons.tsx      사각형만으로 그린 도트 아이콘
-    ItemTile.tsx   자료 한 칸 (잠김 상태 포함)
-    Uploader.tsx   폴더째 적재 UI
+  components/      도트 아이콘 · 자료 타일 · 업로더
   app/
-    globals.css    픽셀 디자인 시스템 (라운드 0 · 2px 외곽선 · 3px 하드 그림자)
-    media/[fileId] 등급 확인 후 파일 스트리밍
-    api/upload     적재 창구 (한 번에 한 파일)
+    globals.css    픽셀 디자인 시스템
+    login/         문 앞 · 2단계 인증
+    media/[fileId] 등급 확인 후 파일 전달
+    api/           업로드 세션·색인, Google OAuth
     admin/         관리 화면
-supabase/migrations/
-  …_init.sql               스키마 · item_effective 뷰 · RLS · 스토리지 버킷
-  …_grants.sql             역할별 권한
-  …_original_filename.sql  원본 파일명 보관
-scripts/seed.mjs           표본 자료 (실제 적재 경로 통과)
+supabase/migrations/   스키마 (7개)
+scripts/schema.sql     마이그레이션을 한 파일로
+scripts/seed.mjs       표본 자료
 ```
 
 ### 디자인
@@ -594,11 +518,10 @@ scripts/seed.mjs           표본 자료 (실제 적재 경로 통과)
 ## 아직 안 한 것
 
 - **음성·영상 자동 전사** — 스키마(`transcript`)와 화면은 준비돼 있고 엔진 연결이 남았습니다.
-  지금은 수기 입력만 가능합니다.
 - **영상 변환(HLS)** — 원본을 그대로 재생합니다. 긴 영상이 많아지면 ffmpeg 변환이 필요합니다.
-- **전량 내보내기** — DC 용어를 키로 쓴 JSON/CSV + 원본 파일 묶음. 서비스가 사라져도 자료는
-  남아야 한다는 원칙의 마지막 조각입니다.
-- **전문 검색 화면** — 색인은 걸려 있고(`item_search_idx`, `transcript_search_idx`) UI 가
-  남았습니다.
-- **장소 등록 화면** — 테이블과 연결은 있으나 등록 UI 는 아직 없습니다.
+- **전량 내보내기** — DC 용어를 키로 쓴 JSON/CSV + 원본 묶음. "서비스가 사라져도 자료는
+  남아야 한다"는 원칙의 마지막 조각입니다.
+- **전문 검색 화면** — 색인은 걸려 있고 UI 가 남았습니다.
+- **장소 등록 화면** — 테이블과 연결은 있으나 등록 UI 가 없습니다.
 - **체크섬 정기 검사** — 기록은 하고 있으나 주기적 대조 작업이 없습니다.
+- **Google 리프레시 토큰 암호화** — `crypto-box.ts` 는 준비돼 있고 적용만 남았습니다.
