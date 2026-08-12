@@ -78,6 +78,41 @@ const DERIVATIVES = [
   { role: 'display' as const, width: 1400 },
 ];
 
+/**
+ * file 행들을 같은 키 집합으로 맞춘다.
+ *
+ * PostgREST 는 배열 삽입 시 모든 원소의 키가 같기를 요구한다(PGRST102).
+ * 원본 행에만 있는 체크섬·EXIF 때문에 축소본 행과 키가 어긋나면
+ * 삽입 전체가 거부되므로, 빠진 자리를 null 로 채워 모양을 맞춘다.
+ */
+const FILE_COLUMNS = [
+  'item_id',
+  'role',
+  'provider',
+  'storage_bucket',
+  'storage_path',
+  'original_filename',
+  'mime',
+  'bytes',
+  'width',
+  'height',
+  'duration_ms',
+  'checksum_sha256',
+  'checksum_md5',
+  'checksum_verified',
+  'exif',
+] as const;
+
+function normalizeFileRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  return rows.map((row) => {
+    const out: Record<string, unknown> = {};
+    for (const col of FILE_COLUMNS) out[col] = row[col] ?? null;
+    // NOT NULL 컬럼은 null 로 덮어쓰지 않는다
+    out.checksum_verified = row.checksum_verified ?? false;
+    return out;
+  });
+}
+
 export interface IngestResult {
   status: 'created' | 'duplicate' | 'failed';
   itemId?: string;
@@ -275,7 +310,13 @@ export async function ingestDriveFile(opts: {
     }
   }
 
-  await supabase.from('file').insert(fileRows);
+  const { error: fileErr } = await supabase.from('file').insert(normalizeFileRows(fileRows));
+  if (fileErr) {
+    // 파일 행이 없으면 자료는 껍데기다. 되돌리고 실패로 알린다.
+    await supabase.from('item').delete().eq('id', item.id);
+    return { status: 'failed', filename: meta.name, reason: `파일 등록 실패: ${fileErr.message}` };
+  }
+
   await supabase.from('event_log').insert({
     item_id: item.id,
     bundle_id: opts.bundleId,
@@ -433,7 +474,13 @@ export async function ingestBytes(opts: {
     }
   }
 
-  await supabase.from('file').insert(fileRows);
+  const { error: fileErr } = await supabase.from('file').insert(normalizeFileRows(fileRows));
+  if (fileErr) {
+    await supabase.storage.from(BUCKET_ORIGINALS).remove([originalPath]);
+    await supabase.from('item').delete().eq('id', item.id);
+    return { status: 'failed', filename, reason: `파일 등록 실패: ${fileErr.message}` };
+  }
+
   await supabase.from('event_log').insert({
     item_id: item.id,
     bundle_id: bundleId,

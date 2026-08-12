@@ -167,7 +167,12 @@ async function upload(bundleId, filename, buffer, mime) {
     }
   }
 
-  await supabase.from('file').insert(rows);
+  // PostgREST 는 배열 삽입 시 모든 원소의 키가 같기를 요구한다(PGRST102).
+  const COLS = ['item_id','role','provider','storage_bucket','storage_path','original_filename',
+    'mime','bytes','width','height','duration_ms','checksum_sha256','checksum_md5','checksum_verified','exif'];
+  const norm = rows.map((r) => Object.fromEntries(COLS.map((c) => [c, c === 'checksum_verified' ? (r[c] ?? false) : (r[c] ?? null)])));
+  const { error: fileErr } = await supabase.from('file').insert(norm);
+  if (fileErr) { console.log(`   ! ${filename}: 파일 등록 실패 ${fileErr.message}`); return { status: 'failed' }; }
   return { status: 'created', itemId: item.id, identifier: item.identifier };
 }
 
