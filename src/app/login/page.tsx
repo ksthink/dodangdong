@@ -20,7 +20,8 @@ import {
   LOGIN_WINDOW_MINUTES,
 } from '@/lib/login-guard';
 import { VERSION_LABEL } from '@/lib/version';
-import { IconHeart, IconLock } from '@/components/icons';
+import LoginForm from '@/components/auth/LoginForm';
+import Field from '@/components/admin/Field';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,71 +88,33 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="gate">
-      <div className="gate-card">
-        <div className="gate-head">
-          <span className="gate-mark">
-            <IconHeart size={16} />
-          </span>
-          <h1>도당동 아카이브</h1>
-          <span className="gate-version">{VERSION_LABEL}</span>
-        </div>
-
-        <div className="rule" />
-
-        {error === 'locked' ? (
-          <div className="callout err" role="alert">
-            로그인 시도가 너무 많습니다. {LOGIN_WINDOW_MINUTES}분 뒤에 다시 시도해 주세요.
-          </div>
-        ) : error ? (
-          <div className="callout err" role="alert">
-            아이디 또는 비밀번호가 맞지 않습니다.
-          </div>
-        ) : null}
-
-        <form action={login} className="stack">
-          <input type="hidden" name="next" value={safeNextPath(next)} />
-
-          <div className="field">
-            <label htmlFor="username">아이디</label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              autoComplete="username"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              required
-              autoFocus
-            />
-          </div>
-
-          <div className="field">
-            <label htmlFor="password">비밀번호</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </div>
-
-          <button type="submit" className="btn" style={{ justifyContent: 'center' }}>
-            들어가기
-          </button>
-        </form>
-
-        <div className="gate-note">
-          <IconLock size={10} />
-          <span>
+    <main className="page page-login">
+      <LoginForm
+        action={login}
+        title="로그인"
+        submitLabel="들어가기"
+        locked={
+          error === 'locked'
+            ? `로그인 시도가 너무 많습니다. ${LOGIN_WINDOW_MINUTES}분 뒤에 다시 시도해 주세요.`
+            : undefined
+        }
+        // 어느 쪽이 틀렸는지는 밝히지 않는다. 아이디가 있는지 없는지를
+        // 알려주는 것만으로도 밖에서 이름을 하나씩 맞춰볼 수 있기 때문이다.
+        error={error && error !== 'locked' ? '아이디 또는 비밀번호가 맞지 않습니다.' : undefined}
+        help={
+          <>
             {familyOpen
               ? '가족 계정으로 들어오면 가족 공개 자료까지 보입니다.'
-              : '지금은 관리자만 들어올 수 있습니다. 가족 계정은 준비되는 대로 엽니다.'}
-          </span>
-        </div>
-      </div>
+              : '지금은 관리자만 들어올 수 있습니다. 가족 계정은 준비되는 대로 엽니다.'}{' '}
+            {VERSION_LABEL}
+          </>
+        }
+      >
+        <input type="hidden" name="next" value={safeNextPath(next)} />
+
+        <Field label="아이디" name="username" autoComplete="username" required />
+        <Field label="비밀번호" name="password" type="password" autoComplete="current-password" required />
+      </LoginForm>
     </main>
   );
 }

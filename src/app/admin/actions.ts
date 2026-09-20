@@ -320,3 +320,252 @@ export async function archiveItem(formData: FormData) {
   revalidatePath(`/admin/items/${id}`);
   revalidatePath('/');
 }
+
+// ---------------------------------------------------------------- 큐레이션
+//
+// 이야기는 자료가 아니라 자료를 가리키는 묶음이다. 여기서 하는 일은
+// 원 자료를 고치는 것이 아니라 가리키는 순서와 큐레이터의 말을 바꾸는 것뿐이다.
+
+export async function createStory(formData: FormData) {
+  await requireAdmin();
+  const title = nz(formData.get('title'));
+  if (!title) redirect('/admin/curation?error=' + encodeURIComponent('이야기 제목이 필요합니다.'));
+
+  const { data, error } = await db()
+    .from('collection')
+    .insert({
+      title,
+      kind: 'story',
+      summary: nz(formData.get('summary')),
+      period_edtf: nz(formData.get('period_edtf')),
+    })
+    .select('id')
+    .single();
+
+  if (error) throw new Error(`이야기 만들기 실패: ${error.message}`);
+  revalidatePath('/admin/curation');
+  redirect(`/admin/curation/${data.id}`);
+}
+
+export async function updateStory(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('collection_id') ?? '');
+  const { error } = await db()
+    .from('collection')
+    .update({
+      title: nz(formData.get('title')),
+      summary: nz(formData.get('summary')),
+      period_edtf: nz(formData.get('period_edtf')),
+      cover_item_id: nz(formData.get('cover_item_id')),
+    })
+    .eq('id', id);
+
+  if (error) throw new Error(`이야기 수정 실패: ${error.message}`);
+  revalidatePath(`/admin/curation/${id}`);
+  revalidatePath(`/stories/${id}`);
+  redirect(`/admin/curation/${id}`);
+}
+
+export async function addBlock(formData: FormData) {
+  await requireAdmin();
+  const collectionId = String(formData.get('collection_id') ?? '');
+  const kind = String(formData.get('kind') ?? 'text');
+
+  // 맨 뒤에 붙인다. position 은 (collection_id, position) 유일 제약이 걸려
+  // 있으므로 빈 자리를 찾지 말고 지금 최대값 다음을 쓴다.
+  const { data: last } = await db()
+    .from('curation_block')
+    .select('position')
+    .eq('collection_id', collectionId)
+    .order('position', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await db().from('curation_block').insert({
+    collection_id: collectionId,
+    position: (last?.position ?? -1) + 1,
+    kind,
+  });
+
+  if (error) throw new Error(`블록 추가 실패: ${error.message}`);
+  revalidatePath(`/admin/curation/${collectionId}`);
+  redirect(`/admin/curation/${collectionId}`);
+}
+
+export async function updateBlock(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('block_id') ?? '');
+  const collectionId = String(formData.get('collection_id') ?? '');
+  const tc = nz(formData.get('timecode_ms'));
+
+  const { error } = await db()
+    .from('curation_block')
+    .update({
+      body: nz(formData.get('body')),
+      caption: nz(formData.get('caption')),
+      speaker_id: nz(formData.get('speaker_id')),
+      timecode_ms: tc ? Number(tc) : null,
+    })
+    .eq('id', id);
+
+  if (error) throw new Error(`블록 수정 실패: ${error.message}`);
+  revalidatePath(`/admin/curation/${collectionId}`);
+  revalidatePath(`/stories/${collectionId}`);
+  redirect(`/admin/curation/${collectionId}`);
+}
+
+/**
+ * 블록 순서 바꾸기.
+ *
+ * (collection_id, position) 에 유일 제약이 걸려 있어 두 행의 값을 그냥
+ * 맞바꾸면 중간에 충돌한다. 한쪽을 잠깐 음수로 빼 두고 세 번에 나눠 옮긴다.
+ * 트랜잭션이 아니라 세 번의 왕복이지만, 관리자 한 사람이 쓰는 화면이라
+ * 그 사이에 끼어들 사람이 없다.
+ */
+export async function moveBlock(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('blockId') ?? formData.get('block_id') ?? '');
+  const dir = String(formData.get('dir') ?? formData.get('direction') ?? 'up') === 'up' ? -1 : 1;
+
+  const supabase = db();
+  const { data: me } = await supabase
+    .from('curation_block')
+    .select('id, position, collection_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (!me) redirect('/admin/curation');
+  const collectionId = me.collection_id;
+
+  const { data: neighbour } = await supabase
+    .from('curation_block')
+    .select('id, position')
+    .eq('collection_id', collectionId)
+    .eq('position', me.position + dir)
+    .maybeSingle();
+  // 끝에서 더 밀면 아무 일도 하지 않는다.
+  if (!neighbour) redirect(`/admin/curation/${collectionId}`);
+
+  await supabase.from('curation_block').update({ position: -1 }).eq('id', me.id);
+  await supabase.from('curation_block').update({ position: me.position }).eq('id', neighbour.id);
+  await supabase.from('curation_block').update({ position: neighbour.position }).eq('id', me.id);
+
+  revalidatePath(`/admin/curation/${collectionId}`);
+  revalidatePath(`/stories/${collectionId}`);
+  redirect(`/admin/curation/${collectionId}`);
+}
+
+export async function removeBlock(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('blockId') ?? formData.get('block_id') ?? '');
+
+  const { data: blk } = await db()
+    .from('curation_block')
+    .select('collection_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (!blk) redirect('/admin/curation');
+  const collectionId = blk.collection_id;
+
+  const { error } = await db().from('curation_block').delete().eq('id', id);
+  if (error) throw new Error(`블록 지우기 실패: ${error.message}`);
+
+  // 빈 자리가 생겨도 position 은 순서만 정하므로 다시 매기지 않는다.
+  // 촘촘하게 유지하려다 매번 전체를 다시 쓰는 편이 더 위험하다.
+  revalidatePath(`/admin/curation/${collectionId}`);
+  revalidatePath(`/stories/${collectionId}`);
+  redirect(`/admin/curation/${collectionId}`);
+}
+
+export async function addRef(formData: FormData) {
+  await requireAdmin();
+  const blockId = String(formData.get('blockId') ?? formData.get('block_id') ?? '');
+  const itemId = String(formData.get('itemId') ?? formData.get('item_id') ?? '');
+
+  const { data: blk } = await db()
+    .from('curation_block')
+    .select('collection_id')
+    .eq('id', blockId)
+    .maybeSingle();
+  if (!blk) redirect('/admin/curation');
+  const collectionId = blk.collection_id;
+
+  const { data: last } = await db()
+    .from('curation_ref')
+    .select('sort_order')
+    .eq('block_id', blockId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // 같은 자료를 두 번 넣어도 조용히 넘어간다 — 두 번 누른 것뿐이다.
+  const { error } = await db()
+    .from('curation_ref')
+    .upsert(
+      { block_id: blockId, item_id: itemId, sort_order: (last?.sort_order ?? -1) + 1 },
+      { onConflict: 'block_id,item_id', ignoreDuplicates: true },
+    );
+
+  if (error) throw new Error(`자료 넣기 실패: ${error.message}`);
+  revalidatePath(`/admin/curation/${collectionId}`);
+  revalidatePath(`/stories/${collectionId}`);
+  redirect(`/admin/curation/${collectionId}`);
+}
+
+export async function removeRef(formData: FormData) {
+  await requireAdmin();
+  const blockId = String(formData.get('blockId') ?? formData.get('block_id') ?? '');
+  const itemId = String(formData.get('itemId') ?? formData.get('item_id') ?? '');
+
+  const { data: blk } = await db()
+    .from('curation_block')
+    .select('collection_id')
+    .eq('id', blockId)
+    .maybeSingle();
+  if (!blk) redirect('/admin/curation');
+  const collectionId = blk.collection_id;
+
+  const { error } = await db()
+    .from('curation_ref')
+    .delete()
+    .eq('block_id', blockId)
+    .eq('item_id', itemId);
+
+  if (error) throw new Error(`자료 빼기 실패: ${error.message}`);
+  revalidatePath(`/admin/curation/${collectionId}`);
+  revalidatePath(`/stories/${collectionId}`);
+  redirect(`/admin/curation/${collectionId}`);
+}
+
+// ---------------------------------------------------------------- 히어로 편성
+
+/**
+ * 첫 화면의 자리 하나를 정한다.
+ *
+ * 고른 이야기이거나 자동 종류이거나 — 둘 다 채우면 DB 가 막는다. 어느 쪽이
+ * 참인지 판단할 근거가 없기 때문이다. 화면에서도 하나만 고르게 하지만,
+ * 여기서 한 번 더 비워 준다.
+ */
+export async function setHeroSlot(formData: FormData) {
+  await requireAdmin();
+  const slot = Number(formData.get('slot') ?? 0);
+  const collectionId = nz(formData.get('collectionId'));
+  const autoKind = nz(formData.get('autoKind'));
+
+  const row = {
+    slot,
+    // 고른 이야기가 있으면 그쪽이 이긴다. 둘 다 채우면 DB 가 막는다 —
+    // 어느 쪽이 참인지 판단할 근거가 없기 때문이다.
+    collection_id: collectionId,
+    auto_kind: collectionId ? null : autoKind,
+    starts_on: nz(formData.get('startsOn')),
+    ends_on: nz(formData.get('endsOn')),
+    modified_at: new Date().toISOString(),
+  };
+
+  const { error } = await db().from('hero_slot').upsert(row, { onConflict: 'slot' });
+  if (error) throw new Error(`히어로 편성 실패: ${error.message}`);
+
+  revalidatePath('/admin/hero');
+  revalidatePath('/');
+  redirect('/admin/hero');
+}

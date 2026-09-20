@@ -12,7 +12,8 @@ import {
 import { verifySecondFactor } from '@/lib/two-factor';
 import { clientIp, checkLoginAllowed, recordLoginAttempt, LOGIN_WINDOW_MINUTES } from '@/lib/login-guard';
 import { VERSION_LABEL } from '@/lib/version';
-import { IconHeart, IconLock } from '@/components/icons';
+import LoginForm from '@/components/auth/LoginForm';
+import Field from '@/components/admin/Field';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,68 +71,41 @@ export default async function VerifyPage({
   }
 
   return (
-    <main className="gate">
-      <div className="gate-card">
-        <div className="gate-head">
-          <span className="gate-mark">
-            <IconHeart size={16} />
-          </span>
-          <h1>도당동 아카이브</h1>
-          <span className="gate-version">{VERSION_LABEL}</span>
-        </div>
-
-        <div className="rule" />
-
-        {error === 'locked' ? (
-          <div className="callout err" role="alert">
-            시도가 너무 많습니다. {LOGIN_WINDOW_MINUTES}분 뒤에 다시 시도해 주세요.
-          </div>
-        ) : error ? (
-          <div className="callout err" role="alert">
-            코드가 맞지 않습니다.
-          </div>
-        ) : null}
-
-        <form action={verify} className="stack">
-          <input type="hidden" name="next" value={safeNextPath(next)} />
-
-          <div className="field">
-            <label htmlFor="code">인증 앱 코드</label>
-            <input
-              id="code"
-              name="code"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              maxLength={9}
-              placeholder="000000"
-              required
-              autoFocus
-              style={{ letterSpacing: '0.2em', textAlign: 'center', fontSize: 16 }}
-            />
-            <span className="hint">Google Authenticator 에 뜨는 6자리 숫자</span>
-          </div>
-
-          <button type="submit" className="btn" style={{ justifyContent: 'center' }}>
-            확인
-          </button>
-        </form>
-
-        <div className="gate-note">
-          <IconLock size={10} />
-          <span>
+    <main className="page page-login">
+      <LoginForm
+        action={verify}
+        title="2단계 인증"
+        submitLabel="확인"
+        locked={
+          error === 'locked'
+            ? `시도가 너무 많습니다. ${LOGIN_WINDOW_MINUTES}분 뒤에 다시 시도해 주세요.`
+            : undefined
+        }
+        error={error && error !== 'locked' ? '코드가 맞지 않습니다.' : undefined}
+        help={
+          <>
             인증 앱을 쓸 수 없다면 발급받아 둔 <b>복구 코드</b>를 같은 칸에 넣으세요. 한 번 쓰면
-            사라집니다.
-          </span>
-        </div>
+            사라집니다. {VERSION_LABEL}
+          </>
+        }
+        footer={
+          <p className="jg-login-help">
+            <a href="/login">처음부터 다시</a>
+          </p>
+        }
+      >
+        <input type="hidden" name="next" value={safeNextPath(next)} />
 
-        <a href="/login" className="small" style={{ textAlign: 'center' }}>
-          처음부터 다시
-        </a>
-      </div>
+        <Field
+          label="인증 앱 코드"
+          name="code"
+          autoComplete="one-time-code"
+          placeholder="000000"
+          mono
+          required
+          help="Google Authenticator 에 뜨는 6자리 숫자. 복구 코드도 이 칸에 넣습니다."
+        />
+      </LoginForm>
     </main>
   );
 }
