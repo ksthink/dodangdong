@@ -79,7 +79,7 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
   const roleOptions = PERSON_ROLES.map(([value, label]) => ({ value, label }));
 
   return (
-    <div className="page-admin">
+    <div className="page page-admin">
       <section className="admin-sec">
         <div className="block-head">
           <h1 className="page-title jg-pixel">{item.title}</h1>

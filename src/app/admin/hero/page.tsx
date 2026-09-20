@@ -23,7 +23,7 @@ export default async function HeroAdminPage() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="page-admin">
+    <div className="page page-admin">
       <section className="admin-sec">
         <h1 className="sec-title jg-pixel">첫 화면 편성</h1>
 

@@ -24,7 +24,7 @@ export default async function CurationPage({
   const stories = await listStories();
 
   return (
-    <div className="page-admin">
+    <div className="page page-admin">
       <section className="admin-sec">
         <h1 className="sec-title jg-pixel">이야기</h1>
 

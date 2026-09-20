@@ -70,7 +70,7 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
   const undated = items.filter((i) => !i.created_start).length;
 
   return (
-    <div className="page-admin">
+    <div className="page page-admin">
       <section className="admin-sec">
         <div className="block-head">
           <h1 className="page-title jg-pixel">{bundle.title}</h1>

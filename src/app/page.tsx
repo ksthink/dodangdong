@@ -24,7 +24,7 @@ export default async function HomePage() {
   const home = await getHome(role);
 
   return (
-    <main className="wrap page-home">
+    <main className="wrap page page-home">
       {home.slides.length > 0 ? <Hero slides={home.slides} /> : null}
 
       <section className="home-find">

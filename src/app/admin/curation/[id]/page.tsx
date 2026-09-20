@@ -44,7 +44,7 @@ export default async function StoryEditorPage({
   const already = new Set(selected?.refs.map((r) => r.itemId) ?? []);
 
   return (
-    <div className="page-admin">
+    <div className="page page-admin">
       <section className="admin-sec">
         <div className="block-head">
           <h1 className="sec-title jg-pixel">{story.title}</h1>
