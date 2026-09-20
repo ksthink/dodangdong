@@ -10,8 +10,14 @@
 --   docker exec -i supabase_db_family psql -U postgres -d postgres < scripts/seed-local.sql
 --
 -- 여러 번 돌려도 괜찮다. 맨 앞에서 자기가 넣은 것을 지우고 시작한다.
--- 파일(file)은 넣지 않는다 — 실제 바이트가 없으면 /media 가 죽는다.
--- 그래서 썸네일 자리에는 디더 무늬가 깔린다.
+--
+-- 썸네일은 여기서 넣지 않는다. 이미지는 DB 가 아니라 스토리지로 가므로
+-- SQL 만으로는 바이트를 올릴 수 없다. 이어서 이것을 돌린다:
+--
+--   python3 scripts/seed-thumbs.py
+--
+-- 돌리지 않으면 썸네일 자리에 디더 무늬가 깔린다 — 그것도 제대로 된
+-- 화면이니, 무늬만 확인할 것이면 건너뛰어도 된다.
 
 begin;
 
