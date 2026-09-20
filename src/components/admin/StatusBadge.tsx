@@ -1,7 +1,7 @@
 import { cx } from '@/lib/ui';
 // 타입만 가져오되 session 에서 직접 받는다 — access.ts 는 next/headers 를
 // 거치므로 클라이언트 표(RecordTable)에서 이 조각을 쓸 때 경계가 흐려진다.
-import type { AccessLevel } from '@/lib/session';
+import { ACCESS_LABELS, type AccessLevel } from '@/lib/session';
 
 /**
  * 공개 범위 뱃지.
@@ -20,12 +20,6 @@ const DOT_CLASS: Record<AccessLevel, string> = {
   private: 'is-private',
 };
 
-const LABELS: Record<AccessLevel, string> = {
-  public: '가족 공개',
-  family: '가족 제한',
-  private: '비공개',
-};
-
 export interface StatusBadgeProps {
   level: AccessLevel;
   /** 화면에 따라 다른 말을 써야 할 때만. 기본은 등급에 딸린 말. */
@@ -36,7 +30,7 @@ export default function StatusBadge({ level, label }: StatusBadgeProps) {
   return (
     <span className={cx('jg-status', DOT_CLASS[level])}>
       <span className="jg-status-dot" aria-hidden="true" />
-      {label ?? LABELS[level]}
+      {label ?? ACCESS_LABELS[level]}
     </span>
   );
 }

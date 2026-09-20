@@ -103,6 +103,9 @@ export default async function VerifyPage({
           placeholder="000000"
           mono
           required
+          autoFocus
+          // 복구 코드도 이 칸에 들어오므로 maxLength 로 6자리를 강제하지 않는다.
+          inputMode="numeric"
           help="Google Authenticator 에 뜨는 6자리 숫자. 복구 코드도 이 칸에 넣습니다."
         />
       </LoginForm>

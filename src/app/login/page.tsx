@@ -112,7 +112,8 @@ export default async function LoginPage({
       >
         <input type="hidden" name="next" value={safeNextPath(next)} />
 
-        <Field label="아이디" name="username" autoComplete="username" required />
+        <Field label="아이디" name="username"
+          autoFocus autoComplete="username" required />
         <Field label="비밀번호" name="password" type="password" autoComplete="current-password" required />
       </LoginForm>
     </main>

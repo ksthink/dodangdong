@@ -38,6 +38,11 @@ export interface FieldProps {
   help?: string;
   placeholder?: string;
   autoComplete?: string;
+  /** 모바일 키패드. 2단계 인증의 6자리처럼 숫자만 받는 칸에 쓴다. */
+  inputMode?: 'text' | 'numeric' | 'tel' | 'email' | 'url' | 'search';
+  maxLength?: number;
+  /** 화면에 칸이 하나뿐일 때만. 여러 칸에 걸면 어디로 갈지 알 수 없다. */
+  autoFocus?: boolean;
   id?: string;
   className?: string;
 }
@@ -62,6 +67,9 @@ export default function Field({
   help,
   placeholder,
   autoComplete,
+  inputMode,
+  maxLength,
+  autoFocus,
   id,
   className,
 }: FieldProps) {
@@ -88,7 +96,7 @@ export default function Field({
 
   let control;
   if (type === 'textarea') {
-    control = <textarea {...common} {...bound} rows={rows ?? 4} />;
+    control = <textarea {...common} {...bound} rows={rows ?? 4} maxLength={maxLength} />;
   } else if (type === 'select') {
     control = (
       // select 에는 readOnly 가 없다 — 고르지 못하게 하려면 disabled 를 쓴다.
@@ -102,7 +110,16 @@ export default function Field({
       </select>
     );
   } else {
-    control = <input {...common} {...bound} type={type} />;
+    control = (
+      <input
+        {...common}
+        {...bound}
+        type={type}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        autoFocus={autoFocus}
+      />
+    );
   }
 
   return (

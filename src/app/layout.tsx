@@ -36,7 +36,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const role = await currentRole();
   // 문 앞 화면에서는 상단 머리글을 두지 않는다. 이름·버전·로그인 창만 남긴다.
   const pathname = (await headers()).get('x-pathname') ?? '';
-  const bare = pathname === '/login';
+  // 2단계 인증(/login/verify)도 문 앞이다. 정확히 일치로 보면 하위 경로가
+  // 빠져서 창 하나만 있어야 할 화면에 머리글이 따라 들어온다.
+  const bare = pathname === '/login' || pathname.startsWith('/login/');
 
   return (
     <html lang="ko" className={galmuri.variable}>

@@ -175,8 +175,15 @@ export function lockLabel(level: AccessLevel): string {
   return '';
 }
 
+/**
+ * 공개 범위를 사람이 읽는 말로.
+ *
+ * '공개'라고만 쓰면 "누구나"로 읽히지만, 이 사이트는 통째로 로그인 뒤에
+ * 있으므로 가장 넓은 범위도 "로그인한 가족 모두"다. 그 차이를 라벨에
+ * 담아 두지 않으면 관리자가 공개 범위를 잘못 판단한다.
+ */
 export const ACCESS_LABELS: Record<AccessLevel, string> = {
-  public: '공개',
-  family: '가족',
+  public: '가족 공개',
+  family: '가족 제한',
   private: '비공개',
 };
