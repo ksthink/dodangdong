@@ -596,9 +596,19 @@ comment on column item.date_verified is
 comment on column item.date_verified_by is
   '그 근거가 된 기록(혼인신고서, 졸업장 따위). 근거가 아카이브 밖에 있으면 NULL.';
 
--- 연표는 확인된 것을 먼저 보여준다. 부분 색인으로 충분하다.
-create index item_verified_date_idx on item (created_start)
-  where date_verified and created_start is not null;
+-- 자기 자신을 근거로 삼을 수는 없다. "이 사진의 날짜는 이 사진이 증명한다"는
+-- 순환 논증이고, 인장이 뜻하는 바("우리가 지어낸 게 아니다")의 정반대다.
+alter table item
+  add constraint item_date_verified_by_not_self
+    check (date_verified_by is null or date_verified_by <> id);
+
+-- 근거가 달려 있는데 확인되지 않은 상태는 없다. 둘은 함께 세운다.
+alter table item
+  add constraint item_date_verified_consistent
+    check (date_verified or date_verified_by is null);
+
+-- 둘 사이를 오가는 고리(A 의 근거가 B, B 의 근거가 A)는 DB 로 막지 않는다.
+-- 재귀 트리거가 필요한데 이 규모에 과하다. 기술 화면에서 거른다.
 
 -- ---------------------------------------------------------------- 사람의 해
 --
@@ -656,12 +666,13 @@ create index life_period_span_idx on life_period (from_year, to_year);
 -- 표를 만들면 "큰아버지"와 "작은아버지"를 각각 넣게 되고, 그러다
 -- 곧 누가 누구인지 아무도 모르는 상태가 된다.
 
-create type relation_kind as enum ('parent', 'spouse');
+-- 이름은 붙는 표를 앞에 단다 — bundle_kind, person_role, file_role 과 같은 결.
+create type person_relation_kind as enum ('parent', 'spouse');
 
 create table person_relation (
   from_person_id uuid not null references person(id) on delete cascade,
   to_person_id   uuid not null references person(id) on delete cascade,
-  kind           relation_kind not null,
+  kind           person_relation_kind not null,
   note           text,
   primary key (from_person_id, to_person_id, kind),
   -- 자기 자신의 부모이거나 배우자일 수는 없다.
@@ -669,7 +680,7 @@ create table person_relation (
 );
 
 comment on table person_relation is
-  'parent 는 from 이 to 의 자식이라는 뜻이다(from 의 부모가 to). spouse 는 방향이 없으므로 양쪽 모두 넣는다.';
+  'kind 는 to 가 from 에게 무엇인지를 말한다. parent 면 to 가 from 의 부모다 — 즉 (아버지, 할머니, parent) 는 "아버지의 부모는 할머니"로 읽는다. spouse 는 방향이 없으므로 양쪽 모두 넣는다.';
 
 create index person_relation_to_idx on person_relation (to_person_id, kind);
 
