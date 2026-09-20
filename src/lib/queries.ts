@@ -32,6 +32,10 @@ export interface ItemRow {
   modified_at: string;
   description: string | null;
   creator: string | null;
+  /** dc:contributor — 촬영·녹음·전사를 도운 사람. 생산자와 구별한다. */
+  contributor: string | null;
+  /** dc:publisher — 사진관·신문사처럼 제3자 생산처. */
+  publisher: string | null;
   medium: string | null;
   extent: string | null;
   language: string | null;
