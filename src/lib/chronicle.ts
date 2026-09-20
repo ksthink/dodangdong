@@ -116,6 +116,21 @@ export function typeLabel(t: string): string {
   return TYPE_LABEL[t] ?? t;
 }
 
+/**
+ * 연표에 적을 짧은 이름.
+ *
+ * 전거의 display_name 은 "김순자(할머니)" 꼴이다. 레인 한 줄과 나이 목록에는
+ * 호칭만 쓴다 — 명세가 말하는 "가족 호칭은 아카이브를 만드는 사람 기준으로
+ * 통일한다"가 이 자리에 해당한다. 괄호가 없으면 이름을 그대로 쓴다.
+ *
+ * relation_to_root('아버지의 어머니')는 쓰지 않는다. 그건 관계를 설명하는
+ * 문장이지 부르는 이름이 아니다.
+ */
+export function shortName(displayName: string): string {
+  const m = displayName.match(/\(([^)]+)\)\s*$/);
+  return m ? m[1] : displayName;
+}
+
 // ---------------------------------------------------------------- 조립
 
 export async function getChronicle(role: Role, decade?: number): Promise<ChronicleData> {
@@ -173,7 +188,15 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
   }
 
   const decadeValues = [...byDecade.keys()].sort((a, b) => a - b);
-  const current = decade ?? decadeValues[decadeValues.length - 1] ?? null;
+
+  // 고르지 않았을 때 어느 연대를 펼칠 것인가. 가장 최근을 펼치면 아카이브가
+  // 대개 텅 빈 화면으로 시작한다 — 최근 10년은 아직 정리되지 않았고, 옛 자료가
+  // 먼저 쌓이기 때문이다. 자료가 가장 많은 연대를 펼친다. 같으면 나중 쪽.
+  const busiest = decadeValues.reduce<number | null>((best, v) => {
+    if (best === null) return v;
+    return (byDecade.get(v) ?? 0) >= (byDecade.get(best) ?? 0) ? v : best;
+  }, null);
+  const current = decade ?? busiest;
 
   const decades: Decade[] = decadeValues.map((v) => ({
     label: `${v}`,
@@ -226,7 +249,7 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
 
       return {
         id: p.id,
-        name: p.relation_to_root || p.display_name,
+        name: shortName(p.display_name),
         born: p.born_year,
         died: p.died_year,
         periods: periods
@@ -280,7 +303,7 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
           .filter((p) => p.born_year !== null && p.born_year <= year)
           .filter((p) => p.died_year === null || p.died_year >= year)
           .map((p) => ({
-            name: p.relation_to_root || p.display_name,
+            name: shortName(p.display_name),
             age: year - (p.born_year as number),
           })),
         events: entries.filter((_, i) => bucket[i].type === 'Event'),
