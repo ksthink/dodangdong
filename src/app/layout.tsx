@@ -20,8 +20,12 @@ export const metadata: Metadata = {
   description: '도당동 가족의 사진·글·음성·영상·편지를 모아 남기는 아카이브',
 };
 
+// '/' 는 아직 옛 연도별 목록이다. 첫 화면(큐레이션)으로 다시 지으면
+// 이름이 '처음'에 맞게 된다. 그때까지는 연표가 두 곳에 있는 셈이고,
+// 제대로 된 쪽은 /chronicle 이다.
 const NAV = [
-  { href: '/', label: '연표' },
+  { href: '/', label: '처음' },
+  { href: '/chronicle', label: '연표' },
   { href: '/collections', label: '이야기' },
   { href: '/gallery', label: '자료' },
   { href: '/people', label: '사람' },
