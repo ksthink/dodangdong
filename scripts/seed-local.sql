@@ -22,6 +22,10 @@
 begin;
 
 -- ---------------------------------------------------------------- 지우기
+delete from hero_slot;
+delete from curation_ref;
+delete from curation_block;
+delete from collection;
 delete from item_subject;
 delete from item_life_period;
 delete from subject;
@@ -167,14 +171,17 @@ insert into item (bundle_id, seq, title, type, created_edtf, created_start, crea
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '외갓집 마당에서 찍은 가족사진' and k.key = 'grandma';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '외갓집 마당에서 찍은 가족사진' and k.key = 'mom';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '외갓집 마당에서 찍은 가족사진' and k.key = 'aunt';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'photographer'::person_role from item i, pkey k where i.title = '외갓집 마당에서 찍은 가족사진' and k.key = 'grandpa' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s join subject pa on pa.id = s.parent_id where i.title = '외갓집 마당에서 찍은 가족사진' and s.label = '어린이날' and pa.label = '명절·기념일';
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '외갓집 마당에서 찍은 가족사진' and lp.label = '유년기' and pe.display_name like '%(어머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 5, '시골집 부엌과 수돗가', 'StillImage'::dcmi_type, '1974?', '1974-01-01', '1974-12-31', 'year'::date_precision, true, false, false, '부엌 앞 수돗가. 할머니는 여기서 겨울에도 쌀을 씻었다.', '아버지', '인화 사진', '1장', 'ko', (select id from place where family_name = '시골집'), 'public'::access_level from bundle b where b.source = '부모님댁' and b.title = '서재 문갑';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '시골집 부엌과 수돗가' and k.key = 'grandma';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'photographer'::person_role from item i, pkey k where i.title = '시골집 부엌과 수돗가' and k.key = 'dad' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '시골집 부엌과 수돗가' and s.label = '음식' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '시골집 부엌과 수돗가' and lp.label = '자녀 양육기' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 6, '외할아버지의 1978년 일기 — 5월', 'Text'::dcmi_type, '1978-05', '1978-05-01', '1978-06-01', 'month'::date_precision, false, false, false, '어린이날에 손님이 많아 닭 두 마리를 잡았다는 대목이 있다.', '김영호(외할아버지)', '일기', '2장', 'ko', null, 'public'::access_level from bundle b where b.source = '외갓집' and b.title = '문갑 서랍';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '외할아버지의 1978년 일기 — 5월' and k.key = 'grandpa';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'author'::person_role from item i, pkey k where i.title = '외할아버지의 1978년 일기 — 5월' and k.key = 'grandpa' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s join subject pa on pa.id = s.parent_id where i.title = '외할아버지의 1978년 일기 — 5월' and s.label = '어린이날' and pa.label = '명절·기념일';
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '외할아버지의 1978년 일기 — 5월' and lp.label = '유년기' and pe.display_name like '%(어머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 7, '아버지 국민학교 졸업식', 'StillImage'::dcmi_type, '1973-02-16', '1973-02-16', '1973-02-16', 'day'::date_precision, false, false, true, '졸업장 날짜로 확인했다.', '미상', '인화 사진', '1장', 'ko', (select id from place where family_name = '풍산국민학교'), 'public'::access_level from bundle b where b.source = '부모님댁' and b.title = '서재 문갑';
@@ -189,20 +196,24 @@ insert into item_life_period (item_id, life_period_id) select i.id, lp.id from i
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 9, '군대 간 아버지에게 보낸 할머니의 편지', 'Text'::dcmi_type, '1983?', '1983-01-01', '1983-12-31', 'year'::date_precision, true, false, false, '농사일과 동생들 소식을 적은 편지. 봉투의 소인이 흐려 연도만 추정했다.', '김순자(할머니)', '편지', '2장', 'ko', null, 'public'::access_level from bundle b where b.source = '부모님댁' and b.title = '서재 문갑';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '군대 간 아버지에게 보낸 할머니의 편지' and k.key = 'grandma';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '군대 간 아버지에게 보낸 할머니의 편지' and k.key = 'dad';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'author'::person_role from item i, pkey k where i.title = '군대 간 아버지에게 보낸 할머니의 편지' and k.key = 'grandma' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '군대 간 아버지에게 보낸 할머니의 편지' and s.label = '군 생활' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '군대 간 아버지에게 보낸 할머니의 편지' and lp.label = '군 복무' and pe.display_name like '%(아버지)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 10, '아버지의 답장', 'Text'::dcmi_type, '1983-06-02', '1983-06-02', '1983-06-02', 'day'::date_precision, false, false, true, '훈련이 끝났고 밥은 잘 먹는다는 짧은 답장. 소인으로 날짜를 확인했다.', '아버지', '편지', '1장', 'ko', null, 'public'::access_level from bundle b where b.source = '할머니댁' and b.title = '안방 장롱';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '아버지의 답장' and k.key = 'dad';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '아버지의 답장' and k.key = 'grandma';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'author'::person_role from item i, pkey k where i.title = '아버지의 답장' and k.key = 'dad' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '아버지의 답장' and s.label = '군 생활' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '아버지의 답장' and lp.label = '군 복무' and pe.display_name like '%(아버지)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 11, '휴가 나온 아버지', 'StillImage'::dcmi_type, '1984-08', '1984-08-01', '1984-09-01', 'month'::date_precision, false, false, false, '첫 휴가 때 군복을 입은 채로 마루에 앉아 있다.', '큰이모', '인화 사진', '1장', 'ko', (select id from place where family_name = '시골집'), 'public'::access_level from bundle b where b.source = '친척 기증' and b.title = '큰이모 앨범';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '휴가 나온 아버지' and k.key = 'dad';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '휴가 나온 아버지' and k.key = 'grandma';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'photographer'::person_role from item i, pkey k where i.title = '휴가 나온 아버지' and k.key = 'aunt' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '휴가 나온 아버지' and s.label = '군 생활' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '휴가 나온 아버지' and lp.label = '군 복무' and pe.display_name like '%(아버지)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 12, '쌀 장부 한 권', 'Text'::dcmi_type, '1974-09', '1974-09-01', '1974-10-01', 'month'::date_precision, false, false, false, '한 해 동안 쌀을 사고 판 기록. 할머니 글씨.', '김순자(할머니)', '장부', '3장', 'ko', null, 'public'::access_level from bundle b where b.source = '할머니댁' and b.title = '부엌 찬장';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '쌀 장부 한 권' and k.key = 'grandma';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'author'::person_role from item i, pkey k where i.title = '쌀 장부 한 권' and k.key = 'grandma' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '쌀 장부 한 권' and s.label = '음식' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '쌀 장부 한 권' and lp.label = '자녀 양육기' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 13, '부모님 결혼식', 'StillImage'::dcmi_type, '1988-10-09', '1988-10-09', '1988-10-09', 'day'::date_precision, false, false, true, '결혼 앨범 한 권 가운데 가족사진 여섯 장.', '대구 예식장 사진부', '앨범', '6장', 'ko', (select id from place where family_name = '대구 예식장'), 'public'::access_level from bundle b where b.source = '부모님댁' and b.title = '결혼 앨범';
@@ -214,18 +225,21 @@ insert into item_life_period (item_id, life_period_id) select i.id, lp.id from i
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 14, '청첩장', 'PhysicalObject'::dcmi_type, '1988-10', '1988-10-01', '1988-11-01', 'month'::date_precision, false, false, false, '결혼 앨범 맨 앞장에 끼워 둔 청첩장.', '아버지', '인쇄물', '1장', 'ko', null, 'public'::access_level from bundle b where b.source = '부모님댁' and b.title = '결혼 앨범';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '청첩장' and k.key = 'dad';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '청첩장' and k.key = 'mom';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'author'::person_role from item i, pkey k where i.title = '청첩장' and k.key = 'dad' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '청첩장' and s.label = '혼례' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '청첩장' and lp.label = '결혼 이후' and pe.display_name like '%(아버지)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 15, '돌잔치', 'StillImage'::dcmi_type, '1991-04', '1991-04-01', '1991-05-01', 'month'::date_precision, false, false, false, '돌상 앞에서. 할머니가 실타래를 쥐여 주었다.', '아버지', '인화 사진', '4장', 'ko', (select id from place where family_name = '서울 아파트'), 'public'::access_level from bundle b where b.source = '부모님댁' and b.title = '앨범 1권';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '돌잔치' and k.key = 'me';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '돌잔치' and k.key = 'grandma';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '돌잔치' and k.key = 'mom';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'photographer'::person_role from item i, pkey k where i.title = '돌잔치' and k.key = 'dad' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s join subject pa on pa.id = s.parent_id where i.title = '돌잔치' and s.label = '돌' and pa.label = '명절·기념일';
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '돌잔치' and lp.label = '손주 시대' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 16, '가족여행 비디오', 'MovingImage'::dcmi_type, '1994-08', '1994-08-01', '1994-09-01', 'month'::date_precision, false, false, false, 'VHS 한 개를 디지털로 옮겼다. 32분.', '아버지', '비디오테이프', '1장', 'ko', (select id from place where family_name = '속초'), 'private'::access_level from bundle b where b.source = '부모님댁' and b.title = '거실 장식장';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '가족여행 비디오' and k.key = 'me';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '가족여행 비디오' and k.key = 'mom';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '가족여행 비디오' and k.key = 'dad';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'photographer'::person_role from item i, pkey k where i.title = '가족여행 비디오' and k.key = 'dad' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '가족여행 비디오' and s.label = '여행' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '가족여행 비디오' and lp.label = '손주 시대' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 17, '외할아버지 영정 사진', 'StillImage'::dcmi_type, '1996', '1996-01-01', '1996-12-31', 'year'::date_precision, false, false, false, '장례 때 쓴 영정 사진.', '미상', '인화 사진', '1장', 'ko', null, 'private'::access_level from bundle b where b.source = '외갓집' and b.title = '앨범 3권';
@@ -234,33 +248,72 @@ insert into item_subject (item_id, subject_id) select i.id, s.id from item i, su
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '외할아버지 영정 사진' and lp.label = '결혼 이후' and pe.display_name like '%(어머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 18, '아파트 부엌의 할머니', 'StillImage'::dcmi_type, '1999-01', '1999-01-01', '1999-02-01', 'month'::date_precision, false, false, false, '이사하고 두 달 뒤, 새 부엌에서 처음 김장을 하던 날.', '어머니', '디지털 사진', '2장', 'ko', (select id from place where family_name = '서울 아파트'), 'public'::access_level from bundle b where b.source = '부모님댁' and b.title = '앨범 2권';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '아파트 부엌의 할머니' and k.key = 'grandma';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'photographer'::person_role from item i, pkey k where i.title = '아파트 부엌의 할머니' and k.key = 'mom' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '아파트 부엌의 할머니' and s.label = '음식' and s.parent_id is null;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '아파트 부엌의 할머니' and s.label = '이사' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '아파트 부엌의 할머니' and lp.label = '손주 시대' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 19, '이삿짐 목록', 'Text'::dcmi_type, '1998-11-02', '1998-11-02', '1998-11-02', 'day'::date_precision, false, false, true, '이삿짐센터 영수증 뒷면에 적은 짐 목록. 영수증 날짜로 확인했다.', '어머니', '메모', '1장', 'ko', null, 'private'::access_level from bundle b where b.source = '부모님댁' and b.title = '서재 문갑';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '이삿짐 목록' and k.key = 'grandma';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '이삿짐 목록' and k.key = 'mom';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'author'::person_role from item i, pkey k where i.title = '이삿짐 목록' and k.key = 'mom' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '이삿짐 목록' and s.label = '이사' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '이삿짐 목록' and lp.label = '손주 시대' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 20, '명절 음식 준비', 'StillImage'::dcmi_type, '2009-10-02', '2009-10-02', '2009-10-02', 'day'::date_precision, false, false, false, '추석 전날 전을 부치는 할머니와 어머니.', '나', '디지털 사진', '5장', 'ko', (select id from place where family_name = '서울 아파트'), 'public'::access_level from bundle b where b.source = '부모님댁' and b.title = '컴퓨터 폴더';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '명절 음식 준비' and k.key = 'grandma';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '명절 음식 준비' and k.key = 'mom';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'photographer'::person_role from item i, pkey k where i.title = '명절 음식 준비' and k.key = 'me' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s join subject pa on pa.id = s.parent_id where i.title = '명절 음식 준비' and s.label = '추석' and pa.label = '명절·기념일';
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '명절 음식 준비' and lp.label = '손주 시대' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 21, '할머니 구술: 피란 가던 겨울', 'Sound'::dcmi_type, '2026-02-11', '2026-02-11', '2026-02-11', 'day'::date_precision, false, false, true, '2026년 설에 녹음한 구술. 1951년 1월 피란길을 이야기한다.', '김순자(할머니)', '구술', '1장', 'ko', null, 'public'::access_level from bundle b where b.source = '구술 채록' and b.title = '2026년 설';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '할머니 구술: 피란 가던 겨울' and k.key = 'grandma';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'speaker'::person_role from item i, pkey k where i.title = '할머니 구술: 피란 가던 겨울' and k.key = 'grandma' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '할머니 구술: 피란 가던 겨울' and s.label = '피란' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '할머니 구술: 피란 가던 겨울' and lp.label = '유년기' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 22, '할머니 구술: 두 부엌 이야기', 'Sound'::dcmi_type, '2026-02-12', '2026-02-12', '2026-02-12', 'day'::date_precision, false, false, true, '시골집 부엌과 아파트 부엌을 비교하며 이야기한다.', '김순자(할머니)', '구술', '1장', 'ko', null, 'public'::access_level from bundle b where b.source = '구술 채록' and b.title = '2026년 설';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '할머니 구술: 두 부엌 이야기' and k.key = 'grandma';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'speaker'::person_role from item i, pkey k where i.title = '할머니 구술: 두 부엌 이야기' and k.key = 'grandma' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s where i.title = '할머니 구술: 두 부엌 이야기' and s.label = '음식' and s.parent_id is null;
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '할머니 구술: 두 부엌 이야기' and lp.label = '손주 시대' and pe.display_name like '%(할머니)';
 insert into item (bundle_id, seq, title, type, created_edtf, created_start, created_end, created_precision, created_uncertain, created_approx, date_verified, description, creator, doc_type, extent, language, place_id, access_level) select b.id, 23, '큰이모 앨범: 외갓집 추석', 'StillImage'::dcmi_type, '1979-09-20', '1979-09-20', '1979-09-20', 'day'::date_precision, false, false, true, '큰이모가 2026년 여름 보내 준 앨범에서.', '큰이모', '앨범', '4장', 'ko', (select id from place where family_name = '외갓집'), 'public'::access_level from bundle b where b.source = '친척 기증' and b.title = '큰이모 앨범';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '큰이모 앨범: 외갓집 추석' and k.key = 'aunt';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '큰이모 앨범: 외갓집 추석' and k.key = 'grandpa';
 insert into item_person (item_id, person_id, role) select i.id, k.id, 'depicted' from item i, pkey k where i.title = '큰이모 앨범: 외갓집 추석' and k.key = 'mom';
+insert into item_person (item_id, person_id, role) select i.id, k.id, 'photographer'::person_role from item i, pkey k where i.title = '큰이모 앨범: 외갓집 추석' and k.key = 'aunt' on conflict do nothing;
 insert into item_subject (item_id, subject_id) select i.id, s.id from item i, subject s join subject pa on pa.id = s.parent_id where i.title = '큰이모 앨범: 외갓집 추석' and s.label = '추석' and pa.label = '명절·기념일';
 insert into item_life_period (item_id, life_period_id) select i.id, lp.id from item i, life_period lp join person pe on pe.id = lp.person_id where i.title = '큰이모 앨범: 외갓집 추석' and lp.label = '유년기' and pe.display_name like '%(어머니)';
+
+-- ---------------------------------------------------------------- 이야기
+-- 큐레이션은 자료가 아니라 자료를 가리키는 묶음이다. 큐레이터의 말은
+-- 설명글에만 쓰고 원 자료의 메타데이터는 고치지 않는다.
+insert into collection (title, kind, summary, period_edtf, sort_order, cover_item_id) select '할머니의 부엌', 'story', '시골집 아궁이에서 아파트 싱크대까지, 두 부엌 사이의 37년.', '1962/1999', 0, id from item where title = '시골집 부엌 앞에서';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 0, 'text'::curation_block_kind, '할머니는 두 부엌을 살았다. 하나는 불을 때는 부엌이었고, 하나는 수도가 나오는 부엌이었다. 그 사이에 37년이 있다.', null, null, null from collection where title = '할머니의 부엌';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 1, 'heading'::curation_block_kind, '시골집', null, null, null from collection where title = '할머니의 부엌';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 2, 'record'::curation_block_kind, null, '새로 들어온 시골집의 부엌 문 앞. 뒤로 아궁이가 보인다.', null, null from collection where title = '할머니의 부엌';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 0 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 2 and i.title = '시골집 부엌 앞에서';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 3, 'gallery'::curation_block_kind, null, '부엌과 수돗가, 그리고 쌀 장부', null, null from collection where title = '할머니의 부엌';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 0 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 3 and i.title = '시골집 부엌과 수돗가';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 1 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 3 and i.title = '쌀 장부 한 권';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 4, 'quote'::curation_block_kind, '겨울에는 물이 얼어서, 아침마다 솥에 물을 끓여 수돗가에 부었다.', null, (select id from pkey where key = 'grandma'), 412000 from collection where title = '할머니의 부엌';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 0 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 4 and i.title = '할머니 구술: 두 부엌 이야기';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 5, 'heading'::curation_block_kind, '아파트', null, null, null from collection where title = '할머니의 부엌';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 6, 'record'::curation_block_kind, null, '이사하고 두 달 뒤, 새 부엌에서 처음 김장을 하던 날.', null, null from collection where title = '할머니의 부엌';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 0 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 6 and i.title = '아파트 부엌의 할머니';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 7, 'text'::curation_block_kind, '아파트 부엌에는 아궁이가 없었다. 할머니는 그것을 편하다고 했고, 가끔 아쉽다고도 했다.', null, null, null from collection where title = '할머니의 부엌';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 8, 'timeline'::curation_block_kind, null, '두 부엌 사이', null, null from collection where title = '할머니의 부엌';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 0 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 8 and i.title = '시골집 부엌 앞에서';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 1 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 8 and i.title = '쌀 장부 한 권';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 2 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 8 and i.title = '이삿짐 목록';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 3 from curation_block b, item i where b.collection_id = (select id from collection where title = '할머니의 부엌') and b.position = 8 and i.title = '아파트 부엌의 할머니';
+insert into collection (title, kind, summary, period_edtf, sort_order, cover_item_id) select '외갓집의 어린이날', 'story', '1978년 5월 14일, 외갓집 마당에 모인 하루.', '1978-05-14', 1, id from item where title = '외갓집 마당에서 찍은 가족사진';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 0, 'text'::curation_block_kind, '외할아버지는 그날 사진을 여러 장 찍었고, 일기에도 그날을 적었다.', null, null, null from collection where title = '외갓집의 어린이날';
+insert into curation_block (collection_id, position, kind, body, caption, speaker_id, timecode_ms) select id, 1, 'gallery'::curation_block_kind, null, '마당에서', null, null from collection where title = '외갓집의 어린이날';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 0 from curation_block b, item i where b.collection_id = (select id from collection where title = '외갓집의 어린이날') and b.position = 1 and i.title = '외갓집 마당에서 찍은 가족사진';
+insert into curation_ref (block_id, item_id, sort_order) select b.id, i.id, 1 from curation_block b, item i where b.collection_id = (select id from collection where title = '외갓집의 어린이날') and b.position = 1 and i.title = '외할아버지의 1978년 일기 — 5월';
+
+-- ---------------------------------------------------------------- 히어로 편성
+-- 자리 셋. 빈 자리는 자동 큐레이션이 채운다. 자동으로 넘기지 않는다.
+insert into hero_slot (slot, collection_id) select 1, id from collection where title = '할머니의 부엌';
+insert into hero_slot (slot, auto_kind) values (2, 'today'), (3, 'recent');
 
 -- ---------------------------------------------------------------- 확인
 commit;
@@ -276,4 +329,9 @@ union all select '인물 연결', count(*) from item_person
 union all select '확인된 날짜', count(*) from item where date_verified
 union all select '주제분류', count(*) from subject
 union all select '주제 연결', count(*) from item_subject
-union all select '시기 연결', count(*) from item_life_period;
+union all select '시기 연결', count(*) from item_life_period
+union all select '이야기', count(*) from collection where kind = 'story'
+union all select '이야기 블록', count(*) from curation_block
+union all select '블록 참조', count(*) from curation_ref
+union all select '히어로 편성', count(*) from hero_slot
+union all select '만든 기록 연결', count(*) from item_person where role <> 'depicted';
