@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/access';
-import { edtfColumns, parseEdtf } from '@/lib/edtf';
+import { edtfColumns, parseEdtf, edtfYear } from '@/lib/edtf';
 import { disconnect } from '@/lib/drive';
 import {
   beginEnrollment,
@@ -155,6 +155,7 @@ export async function updateItem(formData: FormData) {
   const patch: Record<string, unknown> = {
     title: nz(formData.get('title')) ?? '제목 없음',
     type: String(formData.get('type')),
+    doc_type: nz(formData.get('doc_type')),
     description: nz(formData.get('description')),
     creator: nz(formData.get('creator')),
     medium: nz(formData.get('medium')),
@@ -242,7 +243,9 @@ export async function createPerson(formData: FormData) {
 export async function bulkUpdateItems(formData: FormData) {
   await requireAdmin();
   const supabase = db();
-  const bundleId = String(formData.get('bundle_id'));
+  // 빈 값을 String() 으로 감싸면 "null" 이라는 글자가 되어 uuid 열에 들어간다.
+  // 묶음 화면에서 부르면 값이 있고, 기록 목록에서 부르면 없다 — 둘 다 옳다.
+  const bundleId = nz(formData.get('bundle_id'));
   const ids = formData.getAll('item_ids').map(String);
   if (ids.length === 0) return;
 
@@ -260,13 +263,22 @@ export async function bulkUpdateItems(formData: FormData) {
   const { error } = await supabase.from('item').update(patch).in('id', ids);
   if (error) throw new Error(`일괄 편집 실패: ${error.message}`);
 
-  await supabase.from('event_log').insert({
+  // 기록이 바뀐 사실은 남겨야 한다. 여기서 조용히 실패하면 무엇을 언제
+  // 고쳤는지가 영영 사라지고, 그것을 알아차릴 방법도 없다.
+  // 고치기 자체는 이미 끝났으므로 그 점을 문구에 적는다.
+  const { error: logError } = await supabase.from('event_log').insert({
     bundle_id: bundleId,
     action: 'bulk_update',
     after: { ids, patch },
   });
+  if (logError) {
+    throw new Error(
+      `기록은 고쳤지만 기록장에 남기지 못했습니다: ${logError.message}`,
+    );
+  }
 
-  revalidatePath(`/admin/bundles/${bundleId}`);
+  if (bundleId) revalidatePath(`/admin/bundles/${bundleId}`);
+  revalidatePath('/admin');
   revalidatePath('/');
 }
 
@@ -568,4 +580,439 @@ export async function setHeroSlot(formData: FormData) {
   revalidatePath('/admin/hero');
   revalidatePath('/');
   redirect('/admin/hero');
+}
+
+// ---------------------------------------------------------------- 분류
+//
+// 네 축 가운데 사람이 손으로 세우는 것은 주제분류뿐이다. 형태·출처는 기록
+// 자체에서 유도되므로 따로 만들 것이 없고, 시기분류는 인물의 생애에 매여 있어
+// 인물 화면에서 다룬다. 여기서는 주제분류를 만들고 고치고, 기록에 주제·시기를
+// 붙인다.
+
+/**
+ * 주제분류 만들기.
+ *
+ * 부모를 주지 않으면 상위 분류가 된다. 두 단계까지만 허용하는 것은 DB 의
+ * 트리거가 지키므로 여기서 따로 세지 않는다 — 규칙이 두 군데 있으면 언젠가
+ * 어긋난다. 같은 부모 아래 같은 이름도 DB 의 유일 제약이 막는다.
+ */
+export async function createSubject(formData: FormData) {
+  await requireAdmin();
+  const label = nz(formData.get('label'));
+  if (!label) {
+    redirect('/admin/classes?error=' + encodeURIComponent('분류 이름이 필요합니다.'));
+  }
+  const parentId = nz(formData.get('parent_id'));
+
+  // 맨 뒤에 붙인다. sort_order 는 순서만 정하므로 빈 자리를 찾지 않는다.
+  // PostgREST 에서 NULL 은 `.eq` 로 걸리지 않으므로 상위는 `.is` 로 좁힌다.
+  const base = db().from('subject').select('sort_order').order('sort_order', { ascending: false }).limit(1);
+  const { data: last } = await (parentId ? base.eq('parent_id', parentId) : base.is('parent_id', null)).maybeSingle();
+
+  const { error } = await db().from('subject').insert({
+    label,
+    parent_id: parentId,
+    sort_order: (last?.sort_order ?? -1) + 1,
+  });
+
+  if (error) throw new Error(`주제분류 만들기 실패: ${error.message}`);
+  revalidatePath('/admin/classes');
+  revalidatePath('/search');
+  redirect('/admin/classes');
+}
+
+export async function renameSubject(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('subject_id') ?? '');
+  const label = nz(formData.get('label'));
+  if (!label) {
+    redirect('/admin/classes?error=' + encodeURIComponent('분류 이름이 필요합니다.'));
+  }
+
+  const { error } = await db().from('subject').update({ label }).eq('id', id);
+  if (error) throw new Error(`주제분류 이름 고치기 실패: ${error.message}`);
+
+  // 찾기 화면은 분류를 id 가 아니라 이름으로 주소에 싣는다(facets.ts). 이름을
+  // 고치면 예전 이름으로 걸어둔 링크는 아무것도 찾지 못한다 — 화면에 그렇게 적어 둔다.
+  revalidatePath('/admin/classes');
+  revalidatePath('/search');
+  redirect('/admin/classes');
+}
+
+/**
+ * 주제분류 지우기.
+ *
+ * 하위가 있으면 외래키의 cascade 가 하위까지 함께 지운다. 기록에 걸어둔
+ * 연결도 같이 사라진다 — 기록 자체는 그대로 남지만 그 분류로는 다시 찾지
+ * 못한다. 되돌릴 수 없으므로 화면에서 미리 알린다.
+ */
+export async function removeSubject(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('subject_id') ?? '');
+
+  const { error } = await db().from('subject').delete().eq('id', id);
+  if (error) throw new Error(`주제분류 지우기 실패: ${error.message}`);
+
+  revalidatePath('/admin/classes');
+  revalidatePath('/search');
+  redirect('/admin/classes');
+}
+
+/**
+ * 기록에 걸린 주제분류를 통째로 다시 세운다.
+ *
+ * 체크박스 폼은 켜진 것만 보내고 끈 것은 아예 보내지 않는다. 무엇이 빠졌는지
+ * 알 길이 없으므로 이 기록의 연결을 전부 지우고 받은 것만 다시 넣는다.
+ * 트랜잭션이 아니라 두 번의 왕복이지만, 관리자 한 사람이 쓰는 화면이라
+ * 그 사이에 끼어들 사람이 없다(moveBlock 과 같은 판단이다).
+ */
+export async function setItemSubjects(formData: FormData) {
+  await requireAdmin();
+  const supabase = db();
+  const itemId = String(formData.get('item_id') ?? '');
+  const ids = [...new Set(formData.getAll('subject_ids').map(String).filter(Boolean))];
+
+  const { error: clearErr } = await supabase.from('item_subject').delete().eq('item_id', itemId);
+  if (clearErr) throw new Error(`주제분류 비우기 실패: ${clearErr.message}`);
+
+  if (ids.length > 0) {
+    const { error } = await supabase
+      .from('item_subject')
+      .insert(ids.map((subject_id) => ({ item_id: itemId, subject_id })));
+    if (error) throw new Error(`주제분류 붙이기 실패: ${error.message}`);
+  }
+
+  revalidatePath(`/admin/items/${itemId}`);
+  revalidatePath(`/item/${itemId}`);
+  revalidatePath('/search');
+  redirect(`/admin/items/${itemId}`);
+}
+
+/** 시기분류도 같은 방식으로 통째로 다시 세운다. */
+export async function setItemPeriods(formData: FormData) {
+  await requireAdmin();
+  const supabase = db();
+  const itemId = String(formData.get('item_id') ?? '');
+  const ids = [...new Set(formData.getAll('life_period_ids').map(String).filter(Boolean))];
+
+  const { error: clearErr } = await supabase
+    .from('item_life_period')
+    .delete()
+    .eq('item_id', itemId);
+  if (clearErr) throw new Error(`시기분류 비우기 실패: ${clearErr.message}`);
+
+  if (ids.length > 0) {
+    const { error } = await supabase
+      .from('item_life_period')
+      .insert(ids.map((life_period_id) => ({ item_id: itemId, life_period_id })));
+    if (error) throw new Error(`시기분류 붙이기 실패: ${error.message}`);
+  }
+
+  revalidatePath(`/admin/items/${itemId}`);
+  revalidatePath(`/item/${itemId}`);
+  revalidatePath('/search');
+  redirect(`/admin/items/${itemId}`);
+}
+
+// ---------------------------------------------------------------- 기록 목록의 일괄 처리
+//
+// 기록 목록에서 여러 줄을 골라 한 번에 처리한다. 공개 범위 바꾸기는 이미
+// bulkUpdateItems 가 하고, 나머지 둘을 여기 둔다.
+
+/**
+ * 고른 기록을 다른 묶음으로 옮긴다.
+ *
+ * 스캔을 잘못 넣는 일은 실제로 생긴다. 옮기면 상속값도 함께 바뀐다 —
+ * 출처·입수 경위·권리·공개 범위를 직접 넣지 않은 기록은 새 묶음의 값을
+ * 따르게 된다. 그것이 옮기기의 뜻이다: 이 기록은 저기서 나온 것이었다.
+ *
+ * 직접 넣은 값(덮어쓴 것)은 그대로 남는다. 묶음을 옮긴다고 해서 사람이
+ * 적어 둔 것을 지우지는 않는다.
+ */
+export async function moveItemsToBundle(formData: FormData) {
+  await requireAdmin();
+  const ids = formData.getAll('item_ids').map(String).filter(Boolean);
+  const bundleId = nz(formData.get('bundle_id'));
+  if (ids.length === 0 || !bundleId) redirect('/admin');
+
+  const { error } = await db().from('item').update({ bundle_id: bundleId }).in('id', ids);
+  if (error) throw new Error(`묶음 옮기기 실패: ${error.message}`);
+
+  await db()
+    .from('event_log')
+    .insert(ids.map((id) => ({ item_id: id, bundle_id: bundleId, action: 'move_bundle' })));
+
+  revalidatePath('/admin');
+  redirect('/admin');
+}
+
+/**
+ * 고른 기록을 보관함으로 내린다.
+ *
+ * 지우지 않는다. 잘못 올린 것도 언젠가 "그때 그게 뭐였더라" 하고 찾게
+ * 되고, 가족 아카이브에서 지운 것은 되돌릴 방법이 없다.
+ */
+export async function archiveItems(formData: FormData) {
+  await requireAdmin();
+  const ids = formData.getAll('item_ids').map(String).filter(Boolean);
+  if (ids.length === 0) redirect('/admin');
+
+  const { error } = await db().from('item').update({ is_archived: true }).in('id', ids);
+  if (error) throw new Error(`보관 실패: ${error.message}`);
+
+  await db()
+    .from('event_log')
+    .insert(ids.map((id) => ({ item_id: id, action: 'archive' })));
+
+  revalidatePath('/admin');
+  redirect('/admin');
+}
+
+// ---------------------------------------------------------------- 인물 편집
+//
+// 인물 목록(createPerson)은 이름을 묶어 두는 자리고, 여기는 한 인물을 깊이
+// 고치는 자리다. 생애 시기가 이 묶음의 무게중심이다 — 찾기 화면의 시기분류
+// (dcterms:temporal)는 life_period 에서 그대로 만들어지므로(facets.ts),
+// 아래 addLifePeriod 가 네 갈래 분류의 한 축을 채우는 유일한 길이다.
+//
+// EDTF 는 원문을 그대로 두고 유도한 연도만 따로 저장한다. item 이
+// created_edtf/created_start 에 쓰는 방식과 같다 — "1936?" 을 1936 으로
+// 덮어써 버리면 추정이라는 사실이 사라진다.
+
+/** 쉼표로 적은 별칭 한 칸을 배열로. 빈 칸은 떨군다. */
+function aliasList(v: FormDataEntryValue | null): string[] {
+  return String(v ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** 인물 화면으로 돌아가며 할 말을 싣는다. */
+function toPerson(id: string, params?: Record<string, string>): never {
+  const qs = new URLSearchParams(params ?? {}).toString();
+  redirect(qs ? `/admin/people/${id}?${qs}` : `/admin/people/${id}`);
+}
+
+export async function updatePerson(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get('person_id') ?? '');
+
+  const birth = nz(formData.get('birth_edtf'));
+  const death = nz(formData.get('death_edtf'));
+
+  const { error } = await db()
+    .from('person')
+    .update({
+      display_name: nz(formData.get('display_name')) ?? '이름 미상',
+      aliases: aliasList(formData.get('aliases')),
+      birth_edtf: birth,
+      death_edtf: death,
+      // 정렬과 연표는 숫자로 돈다. 원문은 위에 그대로 두고 여기에만 유도값을 넣는다.
+      born_year: edtfYear(birth),
+      died_year: edtfYear(death),
+      relation_to_root: nz(formData.get('relation_to_root')),
+      note: nz(formData.get('note')),
+    })
+    .eq('id', id);
+  if (error) throw new Error(`인물 저장 실패: ${error.message}`);
+
+  revalidatePath(`/admin/people/${id}`);
+  revalidatePath('/admin/people');
+  revalidatePath(`/people/${id}`);
+  revalidatePath('/people');
+  revalidatePath('/chronicle');
+  toPerson(id, { done: '인물을 저장했습니다.' });
+}
+
+/**
+ * 생애 시기를 더한다 — 곧 시기분류 하나를 세우는 일이다.
+ *
+ * from_year <= to_year 제약이 DB 에 걸려 있다. 거꾸로 적은 기간을 그대로
+ * 보내면 화면이 오류 페이지로 넘어가 방금 적은 것이 사라진다. 미리 걸러
+ * 같은 화면으로 돌려보내는 편이 낫다.
+ */
+export async function addLifePeriod(formData: FormData) {
+  await requireAdmin();
+  const supabase = db();
+  const personId = String(formData.get('person_id') ?? '');
+
+  const label = nz(formData.get('label'));
+  if (!label) toPerson(personId, { error: '시기의 이름을 적어 주세요.' });
+
+  const fromEdtf = nz(formData.get('from_edtf'));
+  const toEdtf = nz(formData.get('to_edtf'));
+  const fromYear = edtfYear(fromEdtf);
+  const toYear = edtfYear(toEdtf);
+  if (fromYear !== null && toYear !== null && fromYear > toYear) {
+    toPerson(personId, { error: `시작(${fromYear})이 끝(${toYear})보다 뒤입니다.` });
+  }
+
+  // 새 시기는 맨 뒤에 붙인다. 생애는 대개 순서대로 적어 내려가고, 순서를
+  // 직접 고르게 하면 칸만 늘어난다.
+  const { data: last, error: lastErr } = await supabase
+    .from('life_period')
+    .select('sort_order')
+    .eq('person_id', personId)
+    .order('sort_order', { ascending: false })
+    .limit(1);
+  if (lastErr) throw new Error(`생애 시기 순서 조회 실패: ${lastErr.message}`);
+
+  const { error } = await supabase.from('life_period').insert({
+    person_id: personId,
+    label,
+    from_edtf: fromEdtf,
+    to_edtf: toEdtf,
+    from_year: fromYear,
+    to_year: toYear,
+    sort_order: (last?.[0]?.sort_order ?? -1) + 1,
+    note: nz(formData.get('note')),
+  });
+  if (error) throw new Error(`생애 시기 추가 실패: ${error.message}`);
+
+  revalidatePath(`/admin/people/${personId}`);
+  revalidatePath('/admin/classes');
+  revalidatePath('/search');
+  revalidatePath(`/people/${personId}`);
+  revalidatePath('/chronicle');
+  toPerson(personId, { done: `시기분류 "${label}" 을(를) 세웠습니다.` });
+}
+
+export async function updateLifePeriod(formData: FormData) {
+  await requireAdmin();
+  const personId = String(formData.get('person_id') ?? '');
+  const id = String(formData.get('life_period_id') ?? '');
+
+  const label = nz(formData.get('label'));
+  if (!label) toPerson(personId, { error: '시기의 이름을 적어 주세요.' });
+
+  const fromEdtf = nz(formData.get('from_edtf'));
+  const toEdtf = nz(formData.get('to_edtf'));
+  const fromYear = edtfYear(fromEdtf);
+  const toYear = edtfYear(toEdtf);
+  if (fromYear !== null && toYear !== null && fromYear > toYear) {
+    toPerson(personId, { error: `시작(${fromYear})이 끝(${toYear})보다 뒤입니다.` });
+  }
+
+  const { error } = await db()
+    .from('life_period')
+    .update({
+      label,
+      from_edtf: fromEdtf,
+      to_edtf: toEdtf,
+      from_year: fromYear,
+      to_year: toYear,
+    })
+    .eq('id', id);
+  if (error) throw new Error(`생애 시기 저장 실패: ${error.message}`);
+
+  revalidatePath(`/admin/people/${personId}`);
+  revalidatePath('/admin/classes');
+  revalidatePath('/search');
+  revalidatePath(`/people/${personId}`);
+  revalidatePath('/chronicle');
+  toPerson(personId, { done: `"${label}" 을(를) 고쳤습니다.` });
+}
+
+/**
+ * 생애 시기를 지운다.
+ *
+ * 걸려 있던 기록의 연결(item_life_period)도 함께 사라진다 — FK 가 CASCADE 다.
+ * 기록 자체는 그대로 남고 분류만 떨어진다.
+ */
+export async function removeLifePeriod(formData: FormData) {
+  await requireAdmin();
+  const personId = String(formData.get('person_id') ?? '');
+  const id = String(formData.get('life_period_id') ?? '');
+
+  const { error } = await db().from('life_period').delete().eq('id', id);
+  if (error) throw new Error(`생애 시기 지우기 실패: ${error.message}`);
+
+  revalidatePath(`/admin/people/${personId}`);
+  revalidatePath('/admin/classes');
+  revalidatePath('/search');
+  revalidatePath(`/people/${personId}`);
+  revalidatePath('/chronicle');
+  toPerson(personId, { done: '시기분류 하나를 지웠습니다.' });
+}
+
+/**
+ * 가족 관계를 맺는다.
+ *
+ * 저장되는 종류는 parent 와 spouse 둘뿐이다. 자식은 parent 를 거꾸로 읽어
+ * 나오는 것이라(people.ts) 따로 저장할 자리가 없다. 그래서 화면에서
+ * "자식"을 고르면 여기서 방향을 뒤집어 (저 인물, 이 인물, parent) 로 넣는다 —
+ * 사람에게 "저 사람 화면에 가서 맺으세요"라고 시키는 대신 기계가 뒤집는다.
+ *
+ * spouse 는 방향이 없다. 한쪽만 넣어두면 반대쪽 화면에서 보이지 않으므로
+ * 양쪽에 다 넣는다.
+ */
+export async function addRelation(formData: FormData) {
+  await requireAdmin();
+  const me = String(formData.get('from_person_id') ?? '');
+  const other = String(formData.get('to_person_id') ?? '');
+  const kind = String(formData.get('kind') ?? '');
+
+  if (!other) toPerson(me, { error: '맺을 인물을 골라 주세요.' });
+  if (other === me) toPerson(me, { error: '자기 자신과는 관계를 맺을 수 없습니다.' });
+
+  const rows =
+    kind === 'child'
+      ? [{ from_person_id: other, to_person_id: me, kind: 'parent' }]
+      : kind === 'spouse'
+        ? [
+            { from_person_id: me, to_person_id: other, kind: 'spouse' },
+            { from_person_id: other, to_person_id: me, kind: 'spouse' },
+          ]
+        : [{ from_person_id: me, to_person_id: other, kind: 'parent' }];
+
+  // 이미 맺힌 관계를 다시 맺어도 오류로 끝나지 않게 한다. 양방향으로 넣는
+  // 배우자는 한쪽만 남아 있는 상태가 실제로 생긴다.
+  const { error } = await db().from('person_relation').upsert(rows, {
+    onConflict: 'from_person_id,to_person_id,kind',
+    ignoreDuplicates: true,
+  });
+  if (error) throw new Error(`가족 관계 맺기 실패: ${error.message}`);
+
+  revalidatePath(`/admin/people/${me}`);
+  revalidatePath(`/admin/people/${other}`);
+  revalidatePath(`/people/${me}`);
+  revalidatePath(`/people/${other}`);
+  revalidatePath('/people');
+  toPerson(me, { done: '가족 관계를 맺었습니다.' });
+}
+
+/** 관계를 끊는다. 배우자는 양쪽에 적혀 있으므로 양쪽 다 지운다. */
+export async function removeRelation(formData: FormData) {
+  await requireAdmin();
+  const supabase = db();
+  const me = String(formData.get('from_person_id') ?? '');
+  const other = String(formData.get('to_person_id') ?? '');
+  const kind = String(formData.get('kind') ?? '');
+  const back = String(formData.get('person_id') ?? me);
+
+  const pairs =
+    kind === 'spouse'
+      ? [
+          [me, other],
+          [other, me],
+        ]
+      : [[me, other]];
+  const storedKind = kind === 'spouse' ? 'spouse' : 'parent';
+
+  for (const [from, to] of pairs) {
+    const { error } = await supabase
+      .from('person_relation')
+      .delete()
+      .eq('from_person_id', from)
+      .eq('to_person_id', to)
+      .eq('kind', storedKind);
+    if (error) throw new Error(`가족 관계 끊기 실패: ${error.message}`);
+  }
+
+  revalidatePath(`/admin/people/${me}`);
+  revalidatePath(`/admin/people/${other}`);
+  revalidatePath(`/people/${me}`);
+  revalidatePath(`/people/${other}`);
+  revalidatePath('/people');
+  toPerson(back, { done: '가족 관계를 끊었습니다.' });
 }

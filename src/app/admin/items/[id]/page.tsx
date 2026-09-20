@@ -3,13 +3,22 @@ import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/access';
 import { getItem } from '@/lib/queries';
+import { getClassPicker } from '@/lib/admin-classes';
 import { parseEdtf } from '@/lib/edtf';
 import Field from '@/components/admin/Field';
 import Notice from '@/components/admin/Notice';
 import Checkbox from '@/components/admin/Checkbox';
 import StatusBadge from '@/components/admin/StatusBadge';
 import { DateValue, TypeTag } from '@/components/search/parts';
-import { updateItem, linkPerson, unlinkPerson, addToCollection, archiveItem } from '../../actions';
+import {
+  updateItem,
+  linkPerson,
+  unlinkPerson,
+  addToCollection,
+  archiveItem,
+  setItemSubjects,
+  setItemPeriods,
+} from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +42,7 @@ const TYPES = [
 ];
 
 /**
- * 낱장 상세 기술.
+ * 기록 상세 기술.
  *
  * 상속 필드는 비워두면 묶음 값을 물려받는다는 뜻이다. 화면에서도 그렇게 보이도록
  * placeholder 에 물려받는 값을 그대로 띄운다 — 비어 있는 칸이 곧 "상속 중"이다.
@@ -41,7 +50,7 @@ const TYPES = [
  * 글로 한 번 더 못을 박아야 한다.
  *
  * 칸마다 더블린코어 요소 코드를 달았다. 보는 화면의 상세정보 표와 같은 이름이
- * 같은 자리에 있어야, 기술하는 사람이 무엇을 채우는지 안다.
+ * 같은 자리에 있어야, 기술하는 이가 무엇을 채우는지 안다.
  */
 export default async function AdminItemPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
@@ -60,6 +69,12 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
       supabase.from('place').select('id, family_name').order('family_name'),
     ]);
 
+  // 주제·시기분류는 따로 불러온다. 위의 Promise.all 은 기술 폼이 쓰는 것들이고,
+  // 여기서 필요한 것은 고를 수 있는 분류와 지금 걸린 것뿐이다.
+  const picker = await getClassPicker(id);
+  const chosenSubjects = new Set(picker.chosenSubjects);
+  const chosenPeriods = new Set(picker.chosenPeriods);
+
   const display = files.find((f) => f.role === 'display') ?? files.find((f) => f.role === 'thumb');
   const original = files.find((f) => f.role === 'original');
   const parsed = parseEdtf(item.created_edtf);
@@ -73,7 +88,7 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
     ...(allPeople ?? []).map((p) => ({ value: String(p.id), label: String(p.display_name) })),
   ];
   const collectionOptions = [
-    { value: '', label: '— 모음집 —' },
+    { value: '', label: '— 이야기 —' },
     ...(allCollections ?? []).map((c) => ({ value: String(c.id), label: String(c.title) })),
   ];
   const roleOptions = PERSON_ROLES.map(([value, label]) => ({ value, label }));
@@ -102,9 +117,9 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
       </section>
 
       <section className="admin-sec">
-        <h2 className="sec-title jg-pixel">지금 이 자료</h2>
+        <h2 className="sec-title jg-pixel">지금 이 기록</h2>
         {/* 뷰어(Viewer)는 상태를 쥐는 클라이언트 조각이라 기술 화면에는 두지 않는다 —
-            여기서 필요한 것은 "고치고 있는 것이 이 자료가 맞는가" 확인뿐이다. */}
+            여기서 필요한 것은 "고치고 있는 것이 이 기록이 맞는가" 확인뿐이다. */}
         {display ? (
           <figure style={{ margin: 0, maxWidth: 420 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -183,6 +198,13 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
               type="select"
               options={TYPES}
               defaultValue={item.type}
+            />
+            <Field
+              name="doc_type"
+              label="세부 형태"
+              code="dc:type"
+              help="편지·일기·족보 따위. 형태분류의 하위 단계가 됩니다."
+              defaultValue={item.doc_type ?? ''}
             />
             <Field
               label="설명"
@@ -279,8 +301,98 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
       </section>
 
       <section className="admin-sec">
+        <h2 className="sec-title jg-pixel">분류</h2>
+        {/* 찾기 화면이 거르는 네 축 가운데 손으로 붙이는 둘. 형태는 위의 유형과
+            세부 형태에서, 출처는 묶음에서 저절로 따라온다.
+
+            주제와 시기는 각각 폼이 따로다. 체크박스는 켠 것만 보내고 끈 것은
+            보내지 않으므로, 한 폼에 둘을 담으면 한쪽을 저장할 때 다른 쪽이
+            통째로 비워진다. */}
+        <p className="jg-note">
+          여기서 붙인 분류로 <strong>찾기</strong> 화면의 주제분류·시기분류가
+          걸립니다. 분류 자체를 만들고 고치는 것은{' '}
+          <Link href="/admin/classes">분류 관리</Link> 화면입니다.
+        </p>
+
+        <form action={setItemSubjects} className="edit-form">
+          <input type="hidden" name="item_id" value={id} />
+          <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
+            <legend className="jg-field-name">
+              주제분류 <span className="jg-field-code">dc:subject</span>
+            </legend>
+            {picker.subjects.length === 0 ? (
+              <p className="jg-note">
+                세워둔 주제분류가 없습니다. 분류 관리 화면에서 먼저 만드세요.
+              </p>
+            ) : (
+              <div className="form-checks">
+                {picker.subjects.flatMap((top) => [
+                  <Checkbox
+                    key={top.id}
+                    name="subject_ids"
+                    value={top.id}
+                    label={top.label}
+                    defaultChecked={chosenSubjects.has(top.id)}
+                  />,
+                  // 하위는 어느 상위에 딸린 것인지 함께 적는다. "추석"만 있으면
+                  // 상위가 여럿일 때 같은 이름이 어디 것인지 알 수 없다.
+                  ...top.children.map((c) => (
+                    <Checkbox
+                      key={c.id}
+                      name="subject_ids"
+                      value={c.id}
+                      label={`${top.label} > ${c.label}`}
+                      defaultChecked={chosenSubjects.has(c.id)}
+                    />
+                  )),
+                ])}
+              </div>
+            )}
+          </fieldset>
+          <div className="form-actions">
+            <button type="submit" className="jg-btn jg-btn-secondary">
+              주제분류 저장
+            </button>
+          </div>
+        </form>
+
+        <form action={setItemPeriods} className="edit-form">
+          <input type="hidden" name="item_id" value={id} />
+          <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
+            <legend className="jg-field-name">
+              시기분류 <span className="jg-field-code">dcterms:temporal</span>
+            </legend>
+            {picker.periods.length === 0 ? (
+              <p className="jg-note">
+                나눠둔 생애 시기가 없습니다. 인물 화면에서 먼저 나누세요.
+              </p>
+            ) : (
+              <div className="form-checks">
+                {picker.periods.flatMap((p) =>
+                  p.periods.map((s) => (
+                    <Checkbox
+                      key={s.id}
+                      name="life_period_ids"
+                      value={s.id}
+                      label={`${p.name} > ${s.label}`}
+                      defaultChecked={chosenPeriods.has(s.id)}
+                    />
+                  )),
+                )}
+              </div>
+            )}
+          </fieldset>
+          <div className="form-actions">
+            <button type="submit" className="jg-btn jg-btn-secondary">
+              시기분류 저장
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="admin-sec">
         <h2 className="sec-title jg-pixel">등장인물</h2>
-        {/* 연결은 한 사람씩 넣고 뺀다. 칩의 ✕ 하나가 곧 unlinkPerson 폼 하나다. */}
+        {/* 연결은 한 인물씩 넣고 뺀다. 칩의 ✕ 하나가 곧 unlinkPerson 폼 하나다. */}
         {people.length > 0 ? (
           <ul className="jg-chips">
             {people.map((p) => (
@@ -334,7 +446,7 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
       </section>
 
       <section className="admin-sec">
-        <h2 className="sec-title jg-pixel">모음집</h2>
+        <h2 className="sec-title jg-pixel">이야기</h2>
         {collections.length > 0 ? (
           <ul className="jg-chips">
             {collections.map((c) => (
@@ -342,14 +454,14 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
             ))}
           </ul>
         ) : (
-          <p className="jg-note">들어간 모음집이 없습니다.</p>
+          <p className="jg-note">들어간 이야기가 없습니다.</p>
         )}
 
         <form action={addToCollection} className="edit-form">
           <input type="hidden" name="item_id" value={id} />
           <div className="form-grid">
             <Field
-              label="모음집"
+              label="이야기"
               name="collection_id"
               type="select"
               options={collectionOptions}

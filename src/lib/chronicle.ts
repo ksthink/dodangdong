@@ -6,15 +6,15 @@ import { thumbsFor, type ItemRow } from './queries';
 /**
  * 연표.
  *
- * 따로 입력하는 것이 없다. 이미 있는 것에서 조립된다 — 사람의 생몰과
- * 생애 시기, 날짜가 있는 모든 자료, 사건, 그리고 그해의 바깥 세상.
+ * 따로 입력하는 것이 없다. 이미 있는 것에서 조립된다 — 인물의 생몰과
+ * 생애 시기, 날짜가 있는 모든 기록, 사건, 그리고 그해의 바깥 세상.
  * 그래서 이 파일에는 쓰기가 없고 조립 규칙만 있다.
  *
  * 세 층으로 나온다. 연대 막대(어느 10년에 무엇이 몰려 있나) → 생애 레인
  * (그 시간대에 누가 살아 있었나) → 해마다 펼침(그해에 무슨 일이 있었나).
  * 위에서 고르면 아래가 따라 움직인다.
  *
- * 잠긴 자료를 목록에서 지우지 않는 것은 이 저장소의 기존 방침을 따른 것이다
+ * 잠긴 기록을 목록에서 지우지 않는 것은 이 저장소의 기존 방침을 따른 것이다
  * (queries.ts 머리말). 연표에서도 자리는 차지하되 제목을 감춘다 — 언제
  * 무언가 있었다는 사실까지 지우면, 가족이 무엇을 못 보고 있는지조차 알 수 없다.
  */
@@ -162,7 +162,7 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
   // (가장 흔한 경우: 마이그레이션을 아직 올리지 않은 채로 배포해
   //  person 질의가 born_year 열 부재로 실패하는 것.)
   for (const [what, res] of [
-    ['자료', itemsRes],
+    ['기록', itemsRes],
     ['인물', peopleRes],
     ['생애 시기', periodsRes],
     ['바깥 세상', worldRes],
@@ -175,7 +175,7 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
   const periods = periodsRes.data ?? [];
   const world = worldRes.data ?? [];
 
-  // 날짜 없는 자료는 연표에 자리가 없다. 몇 건인지만 세어 아래에 알린다.
+  // 날짜 없는 기록은 연표에 자리가 없다. 몇 건인지만 세어 아래에 알린다.
   const undatedCount = await countUndated();
 
   // ── 연대 ────────────────────────────────────────────────────
@@ -190,8 +190,8 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
   const decadeValues = [...byDecade.keys()].sort((a, b) => a - b);
 
   // 고르지 않았을 때 어느 연대를 펼칠 것인가. 가장 최근을 펼치면 아카이브가
-  // 대개 텅 빈 화면으로 시작한다 — 최근 10년은 아직 정리되지 않았고, 옛 자료가
-  // 먼저 쌓이기 때문이다. 자료가 가장 많은 연대를 펼친다. 같으면 나중 쪽.
+  // 대개 텅 빈 화면으로 시작한다 — 최근 10년은 아직 정리되지 않았고, 옛 기록이
+  // 먼저 쌓이기 때문이다. 기록이 가장 많은 연대를 펼친다. 같으면 나중 쪽.
   const busiest = decadeValues.reduce<number | null>((best, v) => {
     if (best === null) return v;
     return (byDecade.get(v) ?? 0) >= (byDecade.get(best) ?? 0) ? v : best;
@@ -206,7 +206,7 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
   }));
 
   // ── 레인의 시간 범위 ─────────────────────────────────────────
-  // 사람의 생몰과 자료의 연도를 모두 감싸는 구간. 양쪽 끝을 10년 단위로
+  // 인물의 생몰과 기록의 연도를 모두 감싸는 구간. 양쪽 끝을 10년 단위로
   // 떨어뜨려 눈금이 잘리지 않게 한다.
   const years: number[] = [];
   for (const it of items) {
@@ -222,7 +222,7 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
   const to = years.length ? Math.ceil(Math.max(...years, nowYear) / 10) * 10 : nowYear;
 
   // ── 레인 ────────────────────────────────────────────────────
-  // 사람마다 한 줄. 그 사람이 등장하거나 만든 자료를 점으로 찍는다.
+  // 인물마다 한 줄. 그 인물이 등장하거나 만든 기록을 점으로 찍는다.
   const personItems = await itemsByPerson(people.map((p) => p.id));
 
   const lanes: Lane[] = people
@@ -334,7 +334,7 @@ function toEntry(it: ItemRow, role: Role): YearEntry {
   const visible = canView(it.access_level, role);
   return {
     date: dateLabel(it),
-    title: visible ? it.title : '잠긴 자료',
+    title: visible ? it.title : '잠긴 기록',
     href: visible ? `/item/${it.id}` : null,
     type: it.type === 'Event' ? null : typeLabel(it.type),
     verified: it.date_verified,
@@ -343,11 +343,11 @@ function toEntry(it: ItemRow, role: Role): YearEntry {
 }
 
 /**
- * 그 사람이 나오거나 만든 자료의 id 집합을 사람별로 모은다.
+ * 그 인물이 나오거나 만든 기록의 id 집합을 인물별로 모은다.
  *
- * 자료 id 가 아니라 사람 id 로 좁힌다. PostgREST 는 `.in()` 목록을 URL 질의
- * 문자열에 싣는데, uuid 하나가 36자라 자료 3,000건이면 URL 이 100KB 를 넘어
- * 프록시의 요청 라인 한계에 걸려 갑자기 400 으로 죽는다. 사람 수는 한 집안
+ * 기록 id 가 아니라 인물 id 로 좁힌다. PostgREST 는 `.in()` 목록을 URL 질의
+ * 문자열에 싣는데, uuid 하나가 36자라 기록 3,000건이면 URL 이 100KB 를 넘어
+ * 프록시의 요청 라인 한계에 걸려 갑자기 400 으로 죽는다. 인물 수는 한 집안
  * 규모로 묶여 있으므로 이쪽을 기준으로 삼으면 천장이 없다.
  */
 async function itemsByPerson(personIds: string[]): Promise<Map<string, Set<string>>> {
@@ -357,7 +357,7 @@ async function itemsByPerson(personIds: string[]): Promise<Map<string, Set<strin
     .from('item_person')
     .select('item_id, person_id')
     .in('person_id', personIds);
-  if (error) throw new Error(`연표 인물-자료 연결 조회 실패: ${error.message}`);
+  if (error) throw new Error(`연표 인물-기록 연결 조회 실패: ${error.message}`);
   for (const r of data ?? []) {
     if (!map.has(r.person_id)) map.set(r.person_id, new Set());
     map.get(r.person_id)!.add(r.item_id);

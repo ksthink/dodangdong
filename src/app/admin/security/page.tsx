@@ -279,7 +279,7 @@ export default async function SecurityPage({
       </section>
 
       <div className="form-actions">
-        <Link href="/admin" className="jg-btn jg-btn-text">← 작업 대기열</Link>
+        <Link href="/admin" className="jg-btn jg-btn-text">← 기록 목록</Link>
       </div>
     </div>
   );

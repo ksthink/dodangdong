@@ -7,7 +7,7 @@ import { canView } from './access';
  * 열람 화면이 쓰는 조회들.
  *
  * 전부 item_effective 뷰를 본다 — 상속 규칙이 SQL 한 곳에만 있게 하기 위해서다.
- * 잠긴 자료는 목록에서 지우지 않는다. "여기 무언가 있다"는 사실까지 감추면
+ * 잠긴 기록은 목록에서 지우지 않는다. "여기 무언가 있다"는 사실까지 감추면
  * 가족이 무엇을 못 보고 있는지조차 알 수 없게 된다.
  */
 
@@ -59,7 +59,7 @@ export interface ThumbRef {
   file_id: string | null;
 }
 
-/** 여러 자료의 썸네일 파일 id 를 한 번에 가져온다. */
+/** 여러 기록의 썸네일 파일 id 를 한 번에 가져온다. */
 export async function thumbsFor(itemIds: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (itemIds.length === 0) return map;
@@ -121,7 +121,7 @@ export async function getGallery(type?: string): Promise<ItemRow[]> {
   const { data, error } = await q
     .order('created_start', { ascending: true, nullsFirst: false })
     .order('seq', { ascending: true });
-  if (error) throw new Error(`자료 조회 실패: ${error.message}`);
+  if (error) throw new Error(`기록 조회 실패: ${error.message}`);
   return (data ?? []) as ItemRow[];
 }
 
@@ -197,7 +197,7 @@ export async function getCollections() {
     .order('sort_order');
   const collections = data ?? [];
 
-  // 표지 자료의 등급을 함께 가져온다. 잠긴 자료를 표지로 삼은 모음집이
+  // 표지 기록의 등급을 함께 가져온다. 잠긴 기록을 표지로 삼은 이야기가
   // 방문자에게 깨진 이미지로 보이지 않도록, 볼 수 있는지 먼저 판정한다.
   const coverIds = collections.map((c) => c.cover_item_id).filter((v): v is string => Boolean(v));
   const coverAccess = new Map<string, AccessLevel>();

@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
  * 첫 화면.
  *
  * 아카이브의 첫인상은 "무엇이 있는가"가 아니라 "무엇을 먼저 보면 되는가"를
- * 말해야 한다. 자료 목록을 그대로 쏟으면 방문한 가족은 어디서부터 볼지
+ * 말해야 한다. 기록 목록을 그대로 쏟으면 방문한 가족은 어디서부터 볼지
  * 모른다. 그래서 큐레이션이 맨 위에 온다.
  *
  * 위에서 아래로: 히어로 → 찾기와 형태분류별 건수 → 이야기 둘 → 최근 기록 넷.
@@ -89,7 +89,7 @@ export default async function HomePage() {
         {home.recent.length === 0 ? (
           <div className="empty">
             <p className="jg-pixel">아직 기록이 없다</p>
-            <p>관리 화면에서 묶음을 만들고 자료를 올리면 여기에 쌓입니다.</p>
+            <p>관리 화면에서 묶음을 만들고 기록을 올리면 여기에 쌓입니다.</p>
           </div>
         ) : (
           <div className="grid-4">

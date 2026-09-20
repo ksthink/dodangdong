@@ -103,7 +103,7 @@ export async function search(role: Role, sel: Selection, sort: SortKey, page: nu
   // 연표와 같은 이유로 전부 던진다 — 실패가 "빈 결과"로 둔갑하면 분류가
   // 통째로 사라진 화면을 아무 경고 없이 보게 된다.
   for (const [what, res] of [
-    ['자료', itemsRes],
+    ['기록', itemsRes],
     ['주제분류', subjectsRes],
     ['주제 연결', linksRes],
     ['생애 시기', periodsRes],
@@ -125,7 +125,7 @@ export async function search(role: Role, sel: Selection, sort: SortKey, page: nu
   }[];
   const plinks = plinksRes.data ?? [];
 
-  // 자료 -> 주제 경로들 / 시기 경로들
+  // 기록 -> 주제 경로들 / 시기 경로들
   const subjectById = new Map(subjects.map((s) => [s.id, s]));
   const subjectPaths = new Map<string, string[]>();
   for (const l of links) {
@@ -148,7 +148,7 @@ export async function search(role: Role, sel: Selection, sort: SortKey, page: nu
     periodPaths.get(l.item_id)!.push(path);
   }
 
-  // 한 자료가 어느 축의 어느 값에 걸리는지
+  // 한 기록이 어느 축의 어느 값에 걸리는지
   const pathsOf = (it: ItemRow, axis: Axis): string[] => {
     switch (axis) {
       case 'form': {
@@ -300,7 +300,7 @@ function axisSkeleton(
     }));
   }
 
-  // 형태·출처는 자료에서 직접 뽑는다.
+  // 형태·출처는 기록에서 직접 뽑는다.
   const tree = new Map<string, Set<string>>();
   for (const it of all) {
     for (const p of pathsOf(it, axis)) {

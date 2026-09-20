@@ -5,7 +5,7 @@ import { shortName, type Lane, type LaneSpan } from './chronicle';
 import { thumbsFor, type ItemRow } from './queries';
 
 /**
- * 사람.
+ * 인물.
  *
  * 연표가 "언제"로 찾는 길이고 분류가 "무엇"으로 찾는 길이라면, 이쪽은
  * "누구"로 찾는 길이다. 가족이 아카이브를 여는 가장 흔한 이유이기도 하다 —
@@ -13,18 +13,18 @@ import { thumbsFor, type ItemRow } from './queries';
  *
  * 두 가지를 지킨다.
  *
- * 하나. 인물 페이지는 공개 기록에 한 번이라도 나오는 사람만 손님에게
- * 보인다(명세). 전거에만 있고 볼 수 있는 자료가 하나도 없는 사람은 이름
+ * 하나. 인물 페이지는 공개 기록에 한 번이라도 나오는 인물만 손님에게
+ * 보인다(명세). 전거에만 있고 볼 수 있는 기록이 하나도 없는 인물은 이름
  * 자체가 집안 정보이므로 목록에도 상세에도 내지 않는다. 관리자는 전부 본다.
- * 가족에게는 가족 등급까지 쳐서 판정한다 — 볼 수 있는 자료가 있으면 그
- * 사람을 숨길 이유가 없고, 판정을 canView 하나로 모아 두면 등급이 늘어도
+ * 가족에게는 가족 등급까지 쳐서 판정한다 — 볼 수 있는 기록이 있으면 그
+ * 인물을 숨길 이유가 없고, 판정을 canView 하나로 모아 두면 등급이 늘어도
  * 이 파일을 고칠 일이 없다.
  *
- * 둘. 잠긴 자료는 목록에서 지우지 않고 제목만 감춘다 — 저장소의 기존
+ * 둘. 잠긴 기록은 목록에서 지우지 않고 제목만 감춘다 — 저장소의 기존
  * 방침(queries.ts 머리말)을 그대로 따른다.
  *
- * 질의는 전부 한 번에 가져와 메모리에서 붙인다. 사람 수는 한 집안 규모로
- * 묶여 있으므로 사람마다 질의를 도는 것(N+1)은 값이 아니라 습관의 문제다.
+ * 질의는 전부 한 번에 가져와 메모리에서 붙인다. 인물 수는 한 집안 규모로
+ * 묶여 있으므로 인물마다 질의를 도는 것(N+1)은 값이 아니라 습관의 문제다.
  */
 
 // ---------------------------------------------------------------- 모양
@@ -82,7 +82,7 @@ export interface PersonDetail {
   appears: PersonRecord[];
   /** 만든 기록. */
   made: PersonRecord[];
-  /** 그 사람 한 줄짜리 생애 레인. */
+  /** 그 인물 한 줄짜리 생애 레인. */
   lane: Lane;
   from: number;
   to: number;
@@ -133,7 +133,7 @@ function kin(p: PersonRow): PersonKin {
   };
 }
 
-/** 부모 → 자식 순. 생년을 모르는 사람은 뒤에 두고 이름으로 가른다. */
+/** 부모 → 자식 순. 생년을 모르는 인물은 뒤에 두고 이름으로 가른다. */
 function byGeneration(a: PersonRow, b: PersonRow): number {
   if (a.born_year !== null && b.born_year !== null) return a.born_year - b.born_year;
   if (a.born_year !== null) return -1;
@@ -161,8 +161,8 @@ export async function getPeopleList(role: Role): Promise<PersonSummary[]> {
   // 없이 보게 되고, 그것이 접근 통제인지 장애인지 알 길이 없다.
   for (const [what, res] of [
     ['인물', peopleRes],
-    ['인물-자료 연결', linksRes],
-    ['자료', itemsRes],
+    ['인물-기록 연결', linksRes],
+    ['기록', itemsRes],
   ] as const) {
     if (res.error) throw new Error(`인물 ${what} 조회 실패: ${res.error.message}`);
   }
@@ -178,7 +178,7 @@ export async function getPeopleList(role: Role): Promise<PersonSummary[]> {
 
   const itemById = new Map(items.map((i) => [i.id, i]));
 
-  // 사람마다 세 가지를 모은다 — 나오는 수, 만든 수, 그리고 볼 수 있는 것이
+  // 인물마다 세 가지를 모은다 — 나오는 수, 만든 수, 그리고 볼 수 있는 것이
   // 하나라도 있는가. 사건(Event)은 세지 않는다. 파일이 없고 제목만 있어
   // "기록 n건"에 섞이면 건수가 실제 볼 수 있는 것보다 부풀어 보인다.
   const counts = new Map<string, { appears: number; made: number }>();
@@ -197,7 +197,7 @@ export async function getPeopleList(role: Role): Promise<PersonSummary[]> {
     else c.appears += 1;
     counts.set(l.person_id, c);
 
-    // 얼굴은 그 사람이 찍힌 사진에서 가져온다. 자기가 찍은 사진은 남의
+    // 얼굴은 그 인물이 찍힌 사진에서 가져온다. 자기가 찍은 사진은 남의
     // 얼굴이므로 쓰지 않는다.
     if (seen && l.role === 'depicted' && it.type === 'StillImage') {
       const list = faceCandidates.get(l.person_id) ?? [];
@@ -210,7 +210,7 @@ export async function getPeopleList(role: Role): Promise<PersonSummary[]> {
 
   const shown = people.filter((p) => role === 'admin' || visible.has(p.id)).sort(byGeneration);
 
-  // 얼굴 후보는 사람마다 세 장까지다. 자료 전체로 썸네일을 훑으면 `.in()`
+  // 얼굴 후보는 인물마다 세 장까지다. 기록 전체로 썸네일을 훑으면 `.in()`
   // 목록이 URL 에 실려 프록시 한계에 걸린다(chronicle.ts 참고).
   const faceIds = shown.flatMap((p) => faceCandidates.get(p.id) ?? []);
   const thumbs = await thumbsFor(faceIds);
@@ -260,7 +260,7 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
     ['인물', peopleRes],
     ['가족 관계', relRes],
     ['생애 시기', periodRes],
-    ['인물-자료 연결', linkRes],
+    ['인물-기록 연결', linkRes],
   ] as const) {
     if (res.error) throw new Error(`인물 ${what} 조회 실패: ${res.error.message}`);
   }
@@ -274,7 +274,7 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
   const periodRows = periodRes.data ?? [];
   const links = linkRes.data ?? [];
 
-  // 자료는 이 사람 것만 가져온다. id 목록이 한 사람의 자료로 묶여 있어
+  // 기록은 이 인물 것만 가져온다. id 목록이 한 인물의 기록으로 묶여 있어
   // URL 길이 걱정이 없다.
   const itemIds = [...new Set(links.map((l) => l.item_id))];
   let items: ItemRow[] = [];
@@ -287,12 +287,12 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
       .eq('bundle_archived', false)
       .order('created_start', { ascending: true, nullsFirst: false })
       .order('seq', { ascending: true });
-    if (error) throw new Error(`인물 자료 조회 실패: ${error.message}`);
+    if (error) throw new Error(`인물 기록 조회 실패: ${error.message}`);
     items = (data ?? []) as ItemRow[];
   }
 
-  // 손님에게는 공개 기록에 한 번이라도 나오는 사람만 보인다. 없는 사람은
-  // 404 로 둔다 — "볼 수 없습니다"라고 답하면 그 사람이 있다는 사실이
+  // 손님에게는 공개 기록에 한 번이라도 나오는 인물만 보인다. 없는 인물은
+  // 404 로 둔다 — "볼 수 없습니다"라고 답하면 그 인물이 있다는 사실이
   // 새어 나가고, 그것이 감추려던 것이다.
   if (role !== 'admin' && !items.some((it) => canView(it.access_level, role))) return null;
 
@@ -314,11 +314,13 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
     } else if (r.kind === 'spouse') {
       const other = r.from_person_id === id ? r.to_person_id : r.to_person_id === id ? r.from_person_id : null;
       const s = other ? byId.get(other) : null;
-      if (s) spouses.push(s);
+      // 배우자는 양쪽에 다 적혀 있다(방향이 없는 관계라 그렇게 저장한다).
+      // 그래서 두 줄을 다 지나가면 같은 사람이 두 번 담긴다.
+      if (s && !spouses.some((x) => x.id === s.id)) spouses.push(s);
     }
   }
 
-  // ── 자료 ────────────────────────────────────────────────────
+  // ── 기록 ────────────────────────────────────────────────────
   const roleOf = new Map<string, string[]>();
   for (const l of links) {
     if (!roleOf.has(l.item_id)) roleOf.set(l.item_id, []);
@@ -334,7 +336,7 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
     const thumb = thumbs.get(it.id);
     return {
       id: it.id,
-      title: seen ? it.title : '잠긴 자료',
+      title: seen ? it.title : '잠긴 기록',
       href: seen ? `/item/${it.id}` : null,
       summary: seen ? it.description : null,
       type: it.type,
@@ -380,7 +382,7 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
       .filter((y): y is number => y !== null),
   };
 
-  // 얼굴은 그 사람이 찍힌 사진에서 가져온다. 자기가 찍은 사진은 남의
+  // 얼굴은 그 인물이 찍힌 사진에서 가져온다. 자기가 찍은 사진은 남의
   // 얼굴이므로 쓰지 않는다.
   const faceItem = records.find(
     (it) =>
@@ -389,7 +391,7 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
       thumbs.has(it.id),
   );
 
-  // 축의 양 끝. 생몰과 자료의 연도를 모두 감싸 10년 단위로 떨어뜨린다 —
+  // 축의 양 끝. 생몰과 기록의 연도를 모두 감싸 10년 단위로 떨어뜨린다 —
   // 눈금이 잘리지 않고, 띠가 레인 밖으로 밀려나지 않는다.
   const years = [
     ...lane.records,

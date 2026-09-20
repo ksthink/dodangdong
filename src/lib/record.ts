@@ -41,7 +41,7 @@ const ROLE_KO: Record<string, string> = {
   mentioned: '언급됨',
 };
 
-/** 자료를 만든 쪽의 역할. 나머지는 등장인물로 본다. */
+/** 기록을 만든 쪽의 역할. 나머지는 등장인물로 본다. */
 const MAKER_ROLES = new Set(['photographer', 'author', 'speaker']);
 
 export async function getRecord(role: Role, id: string): Promise<RecordDetail | null> {
@@ -58,7 +58,7 @@ export async function getRecord(role: Role, id: string): Promise<RecordDetail | 
 
   const it = item as ItemRow;
 
-  // 볼 수 없는 자료는 있다는 사실까지 감추지는 않되, 내용은 주지 않는다.
+  // 볼 수 없는 기록은 있다는 사실까지 감추지는 않되, 내용은 주지 않는다.
   // 목록에서 자리를 남기는 방침과 같은 자리다.
   if (!canView(it.access_level, role)) return null;
   if (it.is_archived && role !== 'admin') return null;
@@ -274,7 +274,7 @@ export async function getRecord(role: Role, id: string): Promise<RecordDetail | 
     related: siblings.map((s) => {
       const visible = canView(s.access_level, role);
       return {
-        title: visible ? s.title : '잠긴 자료',
+        title: visible ? s.title : '잠긴 기록',
         href: visible ? `/item/${s.id}` : null,
         type: typeLabel(s.type),
         date: s.created_edtf ?? s.created_start,

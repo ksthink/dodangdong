@@ -154,9 +154,11 @@ body, .jg-pixel, .jg-card-title, .jg-verified, .jg-row-title {
   font-smooth: never;
 }
 
-/* 옛 화면의 제목. 새 화면은 .jg-* 가 제 크기를 들고 온다. */
+/* 옛 화면의 제목. 새 화면은 .jg-* 가 제 크기를 들고 온다.
+ * 크기는 원본의 네 단계(48·36·24·12)에서 가져온다 — 32px 은 그 사이
+ * 크기라 픽셀 글꼴이 격자에서 어긋난다. */
 h1, h2, h3, h4, h5 { margin: 0; font-weight: 700; line-height: 1.5; }
-h1 { font-size: 32px; }
+h1 { font-size: 36px; }
 h2 { font-size: 24px; }
 h3, h4, h5 { font-size: 16px; }
 p { margin: 0; }

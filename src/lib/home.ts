@@ -7,7 +7,7 @@ import { thumbsFor, type ItemRow } from './queries';
  * 첫 화면.
  *
  * 아카이브의 첫인상은 "무엇이 있는가"가 아니라 "무엇을 먼저 보면 되는가"를
- * 말해야 한다. 자료 목록을 그대로 쏟으면 방문한 가족은 어디서부터 볼지
+ * 말해야 한다. 기록 목록을 그대로 쏟으면 방문한 가족은 어디서부터 볼지
  * 모른다. 그래서 큐레이션을 맨 위에 둔다.
  *
  * 히어로는 자리 셋이다. 관리자가 편성한 것이 먼저고, 빈 자리는 자동
@@ -81,7 +81,7 @@ export async function getHome(role: Role): Promise<HomeData> {
   // 연표·찾기와 같은 이유로 전부 던진다. 실패가 "빈 결과"로 둔갑하면
   // 첫 화면이 조용히 반쪽이 된다.
   for (const [what, res] of [
-    ['자료', itemsRes],
+    ['기록', itemsRes],
     ['이야기', storiesRes],
     ['히어로 편성', slotsRes],
     ['이야기 블록', blockRefsRes],
@@ -95,7 +95,7 @@ export async function getHome(role: Role): Promise<HomeData> {
   const stories = storiesRes.data ?? [];
   const slots = slotsRes.data ?? [];
 
-  // 이야기마다 엮인 자료 수
+  // 이야기마다 엮인 기록 수
   const refs = (blockRefsRes.data ?? []) as unknown as {
     item_id: string;
     curation_block: { collection_id: string } | null;
@@ -183,7 +183,7 @@ export async function getHome(role: Role): Promise<HomeData> {
 // ---------------------------------------------------------------- 자동 큐레이션
 
 /**
- * 오늘과 월·일이 같은 자료.
+ * 오늘과 월·일이 같은 기록.
  *
  * 날짜가 확인된 것만 쓴다. 추정 날짜로 "오늘, 48년 전"을 말하면 그 숫자가
  * 사실인 척하게 된다 — 인장이 있는 것에만 이 자리를 준다.

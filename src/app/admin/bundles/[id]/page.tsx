@@ -48,7 +48,7 @@ const BULK_TYPES = [{ value: '', label: '— 그대로 —' }, ...TYPES];
  * 묶음 한 개 — 기술 · 적재 · 일괄 편집이 한 화면에 있다.
  * 관리자가 실제로 시간을 보내는 곳이므로 오가는 단계를 만들지 않았다.
  *
- * 구획마다 제목을 달아 무엇을 하는 자리인지 먼저 읽히게 했다. 낱장은
+ * 구획마다 제목을 달아 무엇을 하는 자리인지 먼저 읽히게 했다. 기록은
  * 타일 격자 대신 표로 편다 — 수백 장을 훑으며 "시기가 비었는가, 공개
  * 범위가 맞는가"를 보는 일이 많고, 그런 읽기는 줄이 맞아야 빠르다.
  */
@@ -77,7 +77,7 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
           <Link href="/admin/bundles">묶음 목록 →</Link>
         </div>
         <ul className="jg-chips">
-          <li>자료 {num(items.length)}건</li>
+          <li>기록 {num(items.length)}건</li>
           {undated > 0 && <li>시기 미상 {num(undated)}건</li>}
           {bundle.period_edtf && <li>{parseEdtf(bundle.period_edtf).label}</li>}
           <li>{bundle.source}</li>
@@ -85,11 +85,11 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
       </section>
 
       <section className="admin-sec">
-        <h2 className="sec-title jg-pixel">자료 올리기</h2>
+        <h2 className="sec-title jg-pixel">기록 올리기</h2>
         <Notice tone="info" title="파일은 우리 서버를 거치지 않습니다">
           <p>
             브라우저에서 Google Drive 로 곧장 갑니다 — 크기 제한이 없고, 끊겨도 이어서 올라갑니다.
-            올린 자료는 이 묶음의 출처·시기·권리·접근등급을 그대로 물려받고, 같은 파일을 두 번
+            올린 기록은 이 묶음의 출처·시기·권리·접근등급을 그대로 물려받고, 같은 파일을 두 번
             올리면 체크섬으로 걸러집니다.
           </p>
           {bundle.drive_folder_id && (
@@ -142,7 +142,7 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
               code="dc:source"
               name="source"
               defaultValue={bundle.source}
-              help="낱장이 비어 있으면 이 값을 물려받습니다."
+              help="기록이 비어 있으면 이 값을 물려받습니다."
             />
             <Field
               label="입수 경위"
@@ -184,7 +184,7 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
               저장
             </button>
             <span className="jg-note">
-              여기를 고치면 상속받는 낱장에 즉시 반영됩니다. 직접 입력한 낱장은 건드리지 않습니다.
+              여기를 고치면 상속받는 기록에 즉시 반영됩니다. 직접 입력한 기록은 건드리지 않습니다.
             </span>
           </div>
         </form>
@@ -192,9 +192,9 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
 
       {items.length > 0 && (
         <section className="admin-sec">
-          <h2 className="sec-title jg-pixel">낱장 {num(items.length)}건</h2>
+          <h2 className="sec-title jg-pixel">기록 {num(items.length)}건</h2>
           <p className="jg-note">
-            체크한 자료에 같은 값을 한 번에 적용합니다. 수천 장을 다룰 때 실제로 시간을 아껴주는
+            체크한 기록에 같은 값을 한 번에 적용합니다. 수천 장을 다룰 때 실제로 시간을 아껴주는
             도구입니다.
           </p>
 
@@ -227,7 +227,7 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
                 defaultValue=""
               />
               <div className="form-checks">
-                <Checkbox name="mark_featured" label="대표로 표시 (연표에서 이 자료가 앞에 나옵니다)" />
+                <Checkbox name="mark_featured" label="대표로 표시 (연표에서 이 기록이 앞에 나옵니다)" />
               </div>
             </div>
 
@@ -296,7 +296,7 @@ export default async function BundlePage({ params }: { params: Promise<{ id: str
 
             <div className="form-actions">
               <button type="submit" className="jg-btn jg-btn-primary">
-                체크한 자료에 적용
+                체크한 기록에 적용
               </button>
             </div>
           </form>

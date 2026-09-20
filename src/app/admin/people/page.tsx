@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  * 인물 전거 관리.
  *
  * 이름을 문자열로 적지 않는 이유가 여기 있다 — "할머니 / 김순덕 / 어머니"를
- * 한 번 묶어두면 이후 모든 자료가 같은 사람을 가리킨다.
+ * 한 번 묶어두면 이후 모든 기록이 같은 인물을 가리킨다.
  */
 export default async function AdminPeoplePage() {
   await requireAdmin();
@@ -31,13 +31,13 @@ export default async function AdminPeoplePage() {
       <section className="admin-sec">
         <h1 className="page-title jg-pixel">인물 전거</h1>
         <p className="page-lead">
-          부르던 호칭을 별칭으로 함께 넣어두면, 어느 이름으로 검색해도 같은 사람에 닿습니다.
+          부르던 호칭을 별칭으로 함께 넣어두면, 어느 이름으로 검색해도 같은 인물에 닿습니다.
         </p>
 
         {(people ?? []).length === 0 ? (
           <div className="empty">
             <p className="jg-pixel">아직 등록된 인물이 없다</p>
-            <p>아래에서 한 사람을 등록해 보세요.</p>
+            <p>아래에서 한 인물을 등록해 보세요.</p>
           </div>
         ) : (
           <div className="jg-rtable-wrap">
@@ -48,14 +48,14 @@ export default async function AdminPeoplePage() {
                   <th>관계</th>
                   <th>생몰</th>
                   <th>달리 부르던 이름</th>
-                  <th>연결된 자료</th>
+                  <th>연결된 기록</th>
                 </tr>
               </thead>
               <tbody>
                 {(people ?? []).map((p) => (
                   <tr key={p.id}>
                     <td className="is-title">
-                      <Link href={`/people/${p.id}`}>{p.display_name}</Link>
+                      <Link href={`/admin/people/${p.id}`}>{p.display_name}</Link>
                     </td>
                     <td className="is-muted">{p.relation_to_root ?? '—'}</td>
                     {/* 생몰은 EDTF 그대로 적는다 — 어림한 해를 '1935년'으로
@@ -91,7 +91,7 @@ export default async function AdminPeoplePage() {
           <div className="form-grid">
             <Field label="이름" code="foaf:name" name="display_name" required placeholder="김순덕" />
             <Field label="관계" name="relation_to_root" placeholder="할머니"
-                   help="이 아카이브를 세운 사람에게서 본 관계입니다." />
+                   help="이 아카이브를 세운 이에게서 본 관계입니다." />
             <Field label="달리 부르던 이름" name="aliases" className="span2"
                    placeholder="할머니, 순덕이, 어머니"
                    help="쉼표로 나눕니다. 여기 적은 이름으로도 검색에 걸립니다." />

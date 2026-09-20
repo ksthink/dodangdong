@@ -31,7 +31,7 @@ export default async function StoriesPage() {
       {stories.length === 0 ? (
         <div className="box">
           <p>아직 엮은 이야기가 없습니다.</p>
-          <p className="small">자료가 모이면 여기에 한 편씩 쌓입니다.</p>
+          <p className="small">기록이 모이면 여기에 한 편씩 쌓입니다.</p>
         </div>
       ) : (
         <div className="grid-2">

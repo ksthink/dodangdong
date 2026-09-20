@@ -44,8 +44,8 @@ export default async function StoragePage({
         <h1 className="page-title jg-pixel">원본은 Drive, 축소본은 Supabase</h1>
         <p className="page-lead">
           용량의 대부분을 차지하는 원본은 Google Drive 에 두고, 갤러리에서 자주 읽히는 축소본만
-          Supabase 에 둡니다. 원본이 사람이 읽을 수 있는 폴더로 남으므로, 이 사이트가 사라져도
-          자료는 남습니다.
+          Supabase 에 둡니다. 원본이 눈으로 바로 확인할 수 있는 폴더로 남으므로, 이 사이트가 사라져도
+          기록은 남습니다.
         </p>
 
         {connected ? (
@@ -162,7 +162,7 @@ export default async function StoragePage({
       </section>
 
       <div className="form-actions">
-        <Link href="/admin" className="jg-btn jg-btn-text">← 작업 대기열</Link>
+        <Link href="/admin" className="jg-btn jg-btn-text">← 기록 목록</Link>
       </div>
     </div>
   );

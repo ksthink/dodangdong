@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 /**
  * 묶음 만들기.
  *
- * 여기서 채운 값이 그 안의 모든 낱장으로 흘러간다. 그래서 출처가 필수다 —
+ * 여기서 채운 값이 그 안의 모든 기록으로 흘러간다. 그래서 출처가 필수다 —
  * 묶음 단위에서는 "어느 집 어느 앨범"을 확실히 알 수 있기 때문이다.
  */
 export default async function NewBundlePage({
@@ -31,12 +31,12 @@ export default async function NewBundlePage({
       <section className="admin-sec">
         <h1 className="page-title jg-pixel">새 묶음</h1>
         <p className="page-lead">
-          여기 적은 출처·시기·권리·접근등급은 이 묶음에 들어올 모든 자료가 물려받습니다.
+          여기 적은 출처·시기·권리·접근등급은 이 묶음에 들어올 모든 기록이 물려받습니다.
         </p>
 
         <Notice tone="info" title="출처는 반드시 적습니다">
-          묶음에서 비워두면 그 안의 낱장 수십 장이 전부 출처 없이 남습니다. 나중에
-          낱장마다 되짚는 일은 사실상 불가능합니다.
+          묶음에서 비워두면 그 안의 기록 수십 건이 전부 출처 없이 남습니다. 나중에
+          기록마다 되짚는 일은 사실상 불가능합니다.
         </Notice>
       </section>
 
@@ -89,7 +89,7 @@ export default async function NewBundlePage({
               required
               className="span2"
               placeholder="큰아버지 댁 다락, 앨범 3권"
-              help="낱장은 이 값을 물려받습니다. 낱장에서 따로 적을 필요가 없습니다."
+              help="기록은 이 값을 물려받습니다. 기록에서 따로 적을 필요가 없습니다."
             />
 
             <Field
@@ -106,7 +106,7 @@ export default async function NewBundlePage({
               name="period_edtf"
               mono
               placeholder="1958 · 195X · 1971/1991"
-              help="EDTF 로 적습니다. 촬영일시가 없는 자료는 이 값을 시기로 물려받습니다."
+              help="EDTF 로 적습니다. 촬영일시가 없는 기록은 이 값을 시기로 물려받습니다."
             />
             <Field
               label="장소"
@@ -134,7 +134,7 @@ export default async function NewBundlePage({
                 { value: 'public', label: '공개 — 링크를 아는 누구나' },
                 { value: 'private', label: '비공개 — 관리자만' },
               ]}
-              help="기본값이 곧 대부분의 자료가 됩니다."
+              help="기본값이 곧 대부분의 기록이 됩니다."
             />
             <Field
               label="디지털화"
@@ -155,7 +155,7 @@ export default async function NewBundlePage({
 
           <div className="form-actions">
             <button type="submit" className="jg-btn jg-btn-primary">
-              만들고 자료 올리기
+              만들고 기록 올리기
             </button>
           </div>
         </form>

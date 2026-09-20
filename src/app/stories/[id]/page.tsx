@@ -81,7 +81,7 @@ function Block({ block }: { block: StoryBlock }) {
 
     case 'gallery': {
       if (block.items.length === 0) return null;
-      // 그림이 없는(또는 잠긴) 자료는 격자에 빈 칸을 만들지 않는다. 대신
+      // 그림이 없는(또는 잠긴) 기록은 격자에 빈 칸을 만들지 않는다. 대신
       // 아래 출처 줄과 끝의 '엮은 기록'에 그대로 남아 있다.
       const images = block.items
         .map((it) => it.thumb)

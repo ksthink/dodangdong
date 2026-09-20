@@ -10,20 +10,20 @@ import { ResultRow } from '@/components/search/parts';
 export const dynamic = 'force-dynamic';
 
 /**
- * 한 사람.
+ * 한 인물.
  *
  * 위에서 아래로 네 층이다. 누구인가(머리) → 언제 살았나(생애 레인) →
- * 어디에 나오나 → 무엇을 남겼나. 앞의 둘이 사람을 세우고, 뒤의 둘이 그
- * 사람을 아카이브에 붙들어 맨다.
+ * 어디에 나오나 → 무엇을 남겼나. 앞의 둘이 인물을 세우고, 뒤의 둘이 그
+ * 인물을 아카이브에 붙들어 맨다.
  *
  * 생애 레인은 연표의 것을 한 줄로 줄여 쓴다. 같은 그림을 두 번 만들지
- * 않으려는 것이고, 연표에서 이 사람의 줄만 떼어 온 것처럼 읽혀야 한다.
+ * 않으려는 것이고, 연표에서 이 인물의 줄만 떼어 온 것처럼 읽혀야 한다.
  */
 export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const role = await currentRole();
   const detail = await getPersonDetail(role, id);
-  // 없는 사람과 볼 수 없는 사람을 똑같이 404 로 둔다 — 구분해서 답하면
+  // 없는 인물과 볼 수 없는 인물을 똑같이 404 로 둔다 — 구분해서 답하면
   // 감추려던 이름이 그 구분에서 새어 나간다.
   if (!detail) notFound();
 
@@ -40,7 +40,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         name={person.name}
         short={person.short}
         face={person.face}
-        kicker="사람"
+        kicker="인물"
         aliases={person.aliases}
         born={person.bornYear}
         died={person.diedYear}
@@ -84,12 +84,12 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
       <RecordSection
         title="나오는 기록"
         records={appears}
-        empty={`${person.short}이(가) 나오는 자료가 아직 없습니다.`}
+        empty={`${person.short}이(가) 나오는 기록이 아직 없습니다.`}
       />
       <RecordSection
         title="만든 기록"
         records={made}
-        empty={`${person.short}이(가) 만든 자료가 아직 없습니다.`}
+        empty={`${person.short}이(가) 만든 기록이 아직 없습니다.`}
       />
     </main>
   );
@@ -99,7 +99,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
  * 기록 한 묶음.
  *
  * 0건이어도 자리를 지운다 — "없다"를 빈 상자로 보여 주면 화면이 늘 절반쯤
- * 비어 있고, 정말 볼 것이 있는 사람과 구별되지 않는다. 대신 한 줄로 적는다.
+ * 비어 있고, 정말 볼 것이 있는 인물과 구별되지 않는다. 대신 한 줄로 적는다.
  */
 function RecordSection({
   title,

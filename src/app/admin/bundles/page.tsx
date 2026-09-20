@@ -69,7 +69,7 @@ export default async function BundlesPage() {
                   <th>시기</th>
                   <th>출처</th>
                   <th>기본 공개 범위</th>
-                  <th>자료</th>
+                  <th>기록</th>
                   <th>시기 미상</th>
                 </tr>
               </thead>

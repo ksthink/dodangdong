@@ -41,10 +41,10 @@ export default async function ChroniclePage({
           <h1 className="page-title jg-pixel">연표</h1>
         </section>
         <div className="box">
-          <p>날짜가 붙은 자료가 아직 없습니다.</p>
+          <p>날짜가 붙은 기록이 아직 없습니다.</p>
           <p className="small">
-            자료에 생산일자를 적으면 여기에 해마다 쌓입니다.
-            {data.undatedCount > 0 ? ` 지금 시기 미상인 자료가 ${num(data.undatedCount)}건 있습니다.` : ''}
+            기록에 생산일자를 적으면 여기에 해마다 쌓입니다.
+            {data.undatedCount > 0 ? ` 지금 시기 미상인 기록이 ${num(data.undatedCount)}건 있습니다.` : ''}
           </p>
         </div>
       </main>
@@ -82,8 +82,8 @@ export default async function ChroniclePage({
 
       {data.undatedCount > 0 ? (
         <p className="small dim">
-          시기가 밝혀지지 않은 자료가 {num(data.undatedCount)}건 있습니다. 연표에는 자리가 없어
-          빠져 있습니다 — <Link href="/gallery">자료</Link>에서 볼 수 있습니다.
+          시기가 밝혀지지 않은 기록이 {num(data.undatedCount)}건 있습니다. 연표에는 자리가 없어
+          빠져 있습니다 — <Link href="/search">기록 찾기</Link>에서 볼 수 있습니다.
         </p>
       ) : null}
     </main>

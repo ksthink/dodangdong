@@ -1141,3 +1141,222 @@ alter table hero_slot      enable row level security;
 grant select, insert, update, delete on curation_block to service_role;
 grant select, insert, update, delete on curation_ref   to service_role;
 grant select, insert, update, delete on hero_slot      to service_role;
+
+
+-- ══════════════════════════════════════════════════════════
+-- 20260920000300_faces.sql
+-- ══════════════════════════════════════════════════════════
+-- 얼굴 인식 기준.
+--
+-- 사진을 올리면 그 안의 얼굴이 누구인지 후보를 내놓기 위한 것이다.
+-- 다만 제안까지만 한다 — 확정은 관리자가 누른다. 확정 전에는 공개 화면에
+-- 나오지 않는다.
+--
+-- 왜 사람이 확정해야 하나. 가족사진의 얼굴은 닮았다. 형제자매는 특히
+-- 그렇고, 같은 사람의 스무 살과 예순 살은 오히려 덜 닮았다. 기계가
+-- 틀리면 그 틀린 이름이 아카이브에 남아 사실이 된다 — 몇 해 뒤에는
+-- 아무도 그것이 추측이었다는 것을 기억하지 못한다.
+--
+-- 그래서 이 표는 "판정"이 아니라 "기준"만 담는다. 확정된 결과는
+-- item_person 에 들어간다.
+
+create table face_reference (
+  id         uuid primary key default gen_random_uuid(),
+  person_id  uuid not null references person(id) on delete cascade,
+  -- 어느 나이대의 얼굴인가. 같은 사람이라도 나이대마다 기준이 따로 있어야
+  -- 한다. 'child' · 'youth' · 'adult' · 'elder' 처럼 자유어로 둔다 —
+  -- 몇 갈래가 필요한지는 실제 사진을 보기 전에는 알 수 없다.
+  era        text,
+  -- 기준으로 삼은 사진. 그 사진에서 잘라낸 얼굴이 이 사람의 본보기가 된다.
+  item_id    uuid references item(id) on delete set null,
+  file_id    uuid references file(id) on delete set null,
+  -- 얼굴이 사진 안 어디에 있는가. 0~1 의 비율로 둔다 — 원본과 축소본의
+  -- 크기가 달라도 같은 자리를 가리킨다.
+  box        jsonb,
+  -- 인식 모델이 내놓은 벡터. 모델을 바꾸면 값의 뜻이 달라지므로 어느
+  -- 모델로 뽑았는지 함께 적는다.
+  embedding  double precision[],
+  model      text,
+  note       text,
+  created_at timestamptz not null default now()
+);
+
+comment on table face_reference is
+  '인물의 얼굴 기준 사진. 얼굴 인식이 후보를 낼 때 견주는 대상이다. 확정된 결과는 여기가 아니라 item_person 에 들어간다.';
+comment on column face_reference.era is
+  '나이대. 같은 사람의 스무 살과 예순 살은 서로 덜 닮았으므로 기준을 나이대마다 따로 둔다.';
+comment on column face_reference.model is
+  '이 벡터를 뽑은 모델. 모델이 바뀌면 값의 뜻도 바뀌므로 함께 적는다 — 적어 두지 않으면 다음 사람이 섞어 쓴다.';
+
+create index face_reference_person_idx on face_reference (person_id, era);
+
+-- ---------------------------------------------------------------- 제안
+--
+-- 인식이 내놓은 후보. 관리자가 누르면 item_person 으로 옮겨가고 여기서는
+-- 사라진다. 누르지 않으면 계속 제안으로만 남는다.
+--
+-- item_person 과 따로 두는 까닭이 여기 있다. 한 표에 "확정"과 "추측"을
+-- 같이 담으면, 언젠가 플래그 하나를 빠뜨린 질의가 추측을 사실처럼 읽는다.
+
+create table face_suggestion (
+  id         uuid primary key default gen_random_uuid(),
+  item_id    uuid not null references item(id) on delete cascade,
+  person_id  uuid not null references person(id) on delete cascade,
+  -- 0~1. 화면에는 숫자보다 "꽤 닮음 / 조금 닮음" 정도로 보여주는 편이 낫다 —
+  -- 0.87 이라는 숫자는 실제보다 정확해 보인다.
+  confidence double precision,
+  box        jsonb,
+  model      text,
+  created_at timestamptz not null default now(),
+  -- 같은 사진에서 같은 사람을 두 번 제안하지 않는다. 다시 돌리면 덮어쓴다.
+  unique (item_id, person_id)
+);
+
+comment on table face_suggestion is
+  '얼굴 인식이 내놓은 후보. 관리자가 확정하면 item_person 으로 옮기고 이 줄은 지운다. 공개 화면에는 절대 나오지 않는다.';
+
+create index face_suggestion_item_idx on face_suggestion (item_id, confidence desc);
+
+-- ---------------------------------------------------------------- 권한
+
+alter table face_reference  enable row level security;
+alter table face_suggestion enable row level security;
+
+grant select, insert, update, delete on face_reference  to service_role;
+grant select, insert, update, delete on face_suggestion to service_role;
+
+
+-- ══════════════════════════════════════════════════════════
+-- 20260920000400_physical.sql
+-- ══════════════════════════════════════════════════════════
+-- 실물과 이용 제한.
+--
+-- 명세의 상세정보 표는 출처분류 줄에 "실물이 있으면 실물 원본 인장"을
+-- 찍는다고 말하고, 이용조건 줄에는 "공개 범위, ai_optout 제한"을 적는다.
+-- 그런데 그 셋을 담을 열이 없었다. 화면에서 물어볼 수 없으니 영영 비어
+-- 있었다.
+
+-- ---------------------------------------------------------------- 실물
+--
+-- 디지털 사본이 있다고 종이가 사라지는 것은 아니다. 오히려 사본을 만든
+-- 뒤에 원본을 어디에 두었는지가 더 헷갈린다 — 스캔하고 돌려준 것인지,
+-- 우리가 보관 중인지, 보관 중이라면 어느 상자인지.
+--
+-- 이 열이 채워져 있으면 상세정보 표의 출처분류 줄에 "실물 원본" 인장이
+-- 붙는다. 그 인장은 "이 기록은 화면에만 있는 것이 아니다"라는 뜻이다.
+
+alter table item
+  add column physical_location  text,
+  add column physical_condition text;
+
+comment on column item.physical_location is
+  '실물이 지금 어디 있는가. "할머니댁 안방 장롱 둘째 칸"처럼 사람이 찾아갈 수 있게 적는다. 비어 있으면 실물이 없거나 어디 있는지 모른다는 뜻이다 — 둘을 구별해야 하면 physical_condition 에 적는다.';
+comment on column item.physical_condition is
+  '실물의 상태. "귀퉁이 물 얼룩", "반으로 접힌 자국". 다음에 꺼낼 때 무엇을 조심해야 하는지 적는 자리다.';
+
+-- 실물이 있는 것만 훑을 일이 생긴다(보관 상자를 정리할 때).
+create index item_physical_idx on item (physical_location)
+  where physical_location is not null;
+
+-- ---------------------------------------------------------------- 이용 제한
+--
+-- 가족이 남긴 것을 기계 학습에 쓰지 말라는 뜻이다. 강제할 방법은 없지만,
+-- 적어 두지 않으면 나중에 누군가 이 아카이브를 통째로 넘길 때 무엇을
+-- 빼야 하는지 알 수 없다. 기본값은 참이다 — 빼는 쪽이 기본이어야 한다.
+
+alter table item
+  add column ai_optout boolean not null default true;
+
+comment on column item.ai_optout is
+  '기계 학습에 쓰지 않는다는 표시. 기본이 참이다 — 가족 기록은 빼는 쪽이 기본이어야 하고, 허락은 한 건씩 받는 것이지 한꺼번에 받는 것이 아니다.';
+
+-- ---------------------------------------------------------------- 인물 식별자
+--
+-- 기록에 ARC- 가 붙듯 인물에도 붙인다. uuid 는 사람이 주고받을 수 없다 —
+-- "FP-001 이 누구더라" 는 되지만 "3661662f-... 가 누구더라" 는 안 된다.
+--
+-- 명세는 FP-001 꼴을 쓴다. 세 자리면 한 집안에 충분하다.
+
+create sequence person_identifier_seq;
+
+alter table person add column identifier text unique;
+
+create or replace function assign_person_identifier() returns trigger language plpgsql as $$
+begin
+  if new.identifier is null or new.identifier = '' then
+    new.identifier := 'FP-' || lpad(nextval('person_identifier_seq')::text, 3, '0');
+  end if;
+  return new;
+end $$;
+
+create trigger person_identifier_trg before insert on person
+  for each row execute function assign_person_identifier();
+
+-- 이미 있는 인물에도 붙인다. 태어난 순서로 — 그래야 번호가 가계를 따른다.
+update person p set identifier = 'FP-' || lpad(x.n::text, 3, '0')
+from (
+  select id, row_number() over (order by born_year nulls last, display_name) as n
+  from person
+) x
+where p.id = x.id and p.identifier is null;
+
+-- 붙인 만큼 시퀀스를 밀어 둔다. 그러지 않으면 다음 인물이 FP-001 을 다시 받는다.
+select setval('person_identifier_seq', greatest((select count(*) from person), 1));
+
+comment on column person.identifier is
+  '인물 식별자 FP-001. uuid 는 사람이 주고받을 수 없어서 따로 둔다.';
+
+-- ---------------------------------------------------------------- 뷰 갱신
+
+drop view if exists item_effective;
+create view item_effective as
+select
+  i.id,
+  i.identifier,
+  i.bundle_id,
+  i.seq,
+  i.title,
+  i.type,
+  i.doc_type,
+  i.created_edtf,
+  i.created_start,
+  i.created_end,
+  i.created_precision,
+  i.created_uncertain,
+  i.created_approx,
+  i.date_verified,
+  i.date_verified_by,
+  i.description,
+  i.creator,
+  i.contributor,
+  i.publisher,
+  i.language,
+  i.medium,
+  i.extent,
+  i.physical_location,
+  i.physical_condition,
+  i.ai_optout,
+  i.is_featured,
+  i.is_archived,
+  i.submitted_at,
+  i.modified_at,
+  coalesce(i.source, b.source)                           as source,
+  coalesce(i.provenance, b.provenance)                   as provenance,
+  coalesce(i.place_id, b.place_id)                       as place_id,
+  coalesce(i.rights, b.rights)                           as rights,
+  coalesce(i.access_level, b.default_access_level)       as access_level,
+  (i.source is not null)       as source_overridden,
+  (i.provenance is not null)   as provenance_overridden,
+  (i.place_id is not null)     as place_overridden,
+  (i.rights is not null)       as rights_overridden,
+  (i.access_level is not null) as access_overridden,
+  b.title           as bundle_title,
+  b.kind            as bundle_kind,
+  b.period_edtf     as bundle_period_edtf,
+  b.is_archived     as bundle_archived,
+  b.drive_folder_id as bundle_drive_folder_id
+from item i
+join bundle b on b.id = i.bundle_id;
+
+grant select on item_effective to service_role;
+alter view item_effective set (security_invoker = on);

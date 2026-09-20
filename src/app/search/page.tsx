@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: '기록 찾기 — 도당동 아카이브',
-  description: '네 갈래 분류로 자료를 찾습니다.',
+  description: '네 갈래 분류로 기록을 찾습니다.',
 };
 
 type Params = Record<string, string | undefined>;
@@ -154,7 +154,7 @@ export default async function SearchPage({
               {res.items.map((it) => (
                 <ResultRow
                   key={it.id}
-                  title={it.locked ? '잠긴 자료' : it.title}
+                  title={it.locked ? '잠긴 기록' : it.title}
                   href={it.locked ? null : `/item/${it.id}`}
                   summary={it.locked ? null : it.description}
                   type={it.type}

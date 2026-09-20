@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
  * 수집 세션 — 방문해서 받아온 단위.
  *
  * 이걸 먼저 적어두면 그 아래 만드는 모든 묶음에 출처가 자동으로 따라붙는다.
- * 낱장마다 "어디서 났나"를 적을 필요가 없어지는 것은 이 화면 덕분이다.
+ * 기록마다 "어디서 났나"를 적을 필요가 없어지는 것은 이 화면 덕분이다.
  */
 export default async function AcquisitionsPage() {
   await requireAdmin();

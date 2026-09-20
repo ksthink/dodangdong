@@ -11,11 +11,11 @@ import { thumbsFor, type ItemRow } from './queries';
  * 손으로 엮은 길이다. collection(kind='story') 하나가 이야기 한 편이고,
  * curation_block 이 그 안의 문단·사진·인용·작은 연표가 된다.
  *
- * 이야기는 글이지만 근거는 기록이다. 그래서 블록마다 가리키는 자료를
+ * 이야기는 글이지만 근거는 기록이다. 그래서 블록마다 가리키는 기록을
  * 끝까지 끌고 다닌다 — 제목·식별자·날짜가 본문 옆에 붙어야 이야기가
  * 기억으로 흐려지지 않는다.
  *
- * 잠긴 자료는 목록에서 지우지 않고 제목만 감춘다(queries.ts 머리말과
+ * 잠긴 기록은 목록에서 지우지 않고 제목만 감춘다(queries.ts 머리말과
  * 같은 방침). 이야기에서 통째로 빼 버리면 문단과 사진의 수가 어긋나
  * 글쓴이가 무엇을 엮었는지조차 알 수 없게 된다.
  */
@@ -26,7 +26,7 @@ export type BlockKind = 'text' | 'heading' | 'record' | 'gallery' | 'quote' | 't
 
 export interface StoryItem {
   id: string;
-  /** 잠겨 있으면 '잠긴 자료'. */
+  /** 잠겨 있으면 '잠긴 기록'. */
   title: string;
   /** 잠겨 있으면 null — 있다는 사실만 남기고 길을 뗀다. */
   href: string | null;
@@ -56,7 +56,7 @@ export interface StoryCardData {
   title: string;
   summary: string | null;
   period: string | null;
-  /** 엮인 자료 수. 잠긴 것도 센다. */
+  /** 엮인 기록 수. 잠긴 것도 센다. */
   count: number;
   cover: string | null;
 }
@@ -67,7 +67,7 @@ export interface StoryData {
   summary: string | null;
   period: string | null;
   blocks: StoryBlock[];
-  /** 이 이야기가 엮은 자료 전체. 블록 순서대로, 중복 없이. */
+  /** 이 이야기가 엮은 기록 전체. 블록 순서대로, 중복 없이. */
   items: StoryItem[];
 }
 
@@ -95,7 +95,7 @@ function toStoryItem(it: ItemRow, role: Role, thumb: string | undefined): StoryI
   const visible = canView(it.access_level, role);
   return {
     id: it.id,
-    title: visible ? it.title : '잠긴 자료',
+    title: visible ? it.title : '잠긴 기록',
     href: visible ? `/item/${it.id}` : null,
     locked: !visible,
     type: it.type,
@@ -126,7 +126,7 @@ export async function getStories(role: Role): Promise<StoryCardData[]> {
   // 이야기가 한 편도 없는 화면을 아무 경고 없이 보게 된다.
   for (const [what, res] of [
     ['이야기', storiesRes],
-    ['엮인 자료', refsRes],
+    ['엮인 기록', refsRes],
   ] as const) {
     if (res.error) throw new Error(`이야기 ${what} 조회 실패: ${res.error.message}`);
   }
@@ -147,7 +147,7 @@ export async function getStories(role: Role): Promise<StoryCardData[]> {
     byStory.get(cid)!.add(r.item_id);
   }
 
-  // 표지 자료의 등급을 먼저 본다. 잠긴 자료를 표지로 삼은 이야기가
+  // 표지 기록의 등급을 먼저 본다. 잠긴 기록을 표지로 삼은 이야기가
   // 방문자에게 깨진 그림으로 보이지 않게 하려는 것이다.
   const coverIds = stories.map((s) => s.cover_item_id).filter((v): v is string => Boolean(v));
   const coverAccess = new Map<string, ItemRow['access_level']>();
@@ -219,7 +219,7 @@ export async function getStory(role: Role, id: string): Promise<StoryData | null
   ]);
 
   for (const [what, res] of [
-    ['엮인 자료', refsRes],
+    ['엮인 기록', refsRes],
     ['화자', peopleRes],
   ] as const) {
     if (res.error) throw new Error(`이야기 ${what} 조회 실패: ${res.error.message}`);
@@ -233,7 +233,7 @@ export async function getStory(role: Role, id: string): Promise<StoryData | null
     ]),
   );
 
-  // 자료도 한 번에 가져와 메모리에서 붙인다.
+  // 기록도 한 번에 가져와 메모리에서 붙인다.
   const itemIds = [...new Set(refs.map((r) => r.item_id))];
   const itemById = new Map<string, ItemRow>();
   if (itemIds.length > 0) {
@@ -243,7 +243,7 @@ export async function getStory(role: Role, id: string): Promise<StoryData | null
       .in('id', itemIds)
       .eq('is_archived', false)
       .eq('bundle_archived', false);
-    if (error) throw new Error(`이야기 자료 조회 실패: ${error.message}`);
+    if (error) throw new Error(`이야기 기록 조회 실패: ${error.message}`);
     for (const it of (data ?? []) as ItemRow[]) itemById.set(it.id, it);
   }
 
@@ -266,12 +266,12 @@ export async function getStory(role: Role, id: string): Promise<StoryData | null
     timecode: timecodeLabel(b.timecode_ms),
     items: (refsByBlock.get(b.id) ?? [])
       .map((r) => itemById.get(r.item_id))
-      // 보존 처리된 자료는 참조가 남아 있어도 화면에 없다.
+      // 보존 처리된 기록은 참조가 남아 있어도 화면에 없다.
       .filter((it): it is ItemRow => Boolean(it))
       .map((it) => toStoryItem(it, role, thumbs.get(it.id))),
   }));
 
-  // 끝에 다는 전체 목록. 블록 순서를 그대로 따르고 같은 자료는 한 번만 적는다.
+  // 끝에 다는 전체 목록. 블록 순서를 그대로 따르고 같은 기록은 한 번만 적는다.
   const seen = new Set<string>();
   const items: StoryItem[] = [];
   for (const b of out) {
@@ -292,7 +292,7 @@ export async function getStory(role: Role, id: string): Promise<StoryData | null
   };
 }
 
-/** 작은 연표를 해마다 묶는다. 연도를 모르는 자료는 뒤에 '시기 미상'으로 남긴다. */
+/** 작은 연표를 해마다 묶는다. 연도를 모르는 기록은 뒤에 '시기 미상'으로 남긴다. */
 export function groupByYear(items: StoryItem[]): { year: string; items: StoryItem[] }[] {
   const buckets = new Map<string, StoryItem[]>();
   for (const it of items) {

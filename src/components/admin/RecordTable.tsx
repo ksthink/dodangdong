@@ -44,7 +44,9 @@ export interface RecordTableProps {
 const BULK_OPS: { op: string; label: string; variant: 'secondary' | 'text' }[] = [
   { op: 'access', label: '공개 범위 바꾸기', variant: 'secondary' },
   { op: 'bundle', label: '묶음에 넣기', variant: 'secondary' },
-  { op: 'delete', label: '삭제', variant: 'text' },
+  // 이 저장소에 삭제는 없다 — is_archived 로 내려갈 뿐이다(스키마 머리말).
+  // 단추가 하는 일과 다른 말을 쓰면 관리자가 무엇을 눌렀는지 오해한다.
+  { op: 'archive', label: '보관함으로', variant: 'text' },
 ];
 
 export default function RecordTable({ rows, total, action }: RecordTableProps) {
