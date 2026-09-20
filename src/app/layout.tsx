@@ -39,11 +39,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // 2단계 인증(/login/verify)도 문 앞이다. 정확히 일치로 보면 하위 경로가
   // 빠져서 창 하나만 있어야 할 화면에 머리글이 따라 들어온다.
   const bare = pathname === '/login' || pathname.startsWith('/login/');
+  // 관리 화면에는 제 띠(AdminBar)가 따로 선다. 여기서 또 얹으면 머리에
+  // 띠가 세 겹이 된다 — 명세는 "맨 위 ink 띠 하나로 구분한다"고 말한다.
+  const inAdmin = pathname.startsWith('/admin');
 
   return (
     <html lang="ko" className={galmuri.variable}>
       <body>
-        {!bare && role === 'admin' && (
+        {!bare && !inAdmin && role === 'admin' && (
           <div className="adminbar">
             <div className="adminbar-inner">
               <span>관리자로 접속 중</span>

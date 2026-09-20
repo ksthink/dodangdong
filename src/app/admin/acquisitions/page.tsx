@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/access';
 import { createAcquisition } from '../actions';
+import Field from '@/components/admin/Field';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,78 +34,101 @@ export default async function AcquisitionsPage() {
   }
 
   return (
-    <main className="wrap">
-      <section className="stack">
-        <span className="eyebrow">1단계</span>
-        <h1>수집 세션</h1>
-        <p className="lede">
+    <div className="page page-admin">
+      <section className="admin-sec">
+        <h1 className="page-title jg-pixel">수집 세션</h1>
+        <p className="page-lead">
           언제, 누구 집에서, 무엇을 받아왔는지 한 번만 적어두면 그 아래 묶음 전부가 출처를
           물려받습니다.
         </p>
       </section>
 
-      <form action={createAcquisition} className="box stack">
-        <h3>새 수집 세션</h3>
-        <div className="formgrid">
-          <div className="field">
-            <label htmlFor="visited_on">방문일</label>
-            <input id="visited_on" name="visited_on" type="date" required />
+      <section className="admin-sec">
+        <h2 className="sec-title jg-pixel">새 수집 세션</h2>
+        <form action={createAcquisition} className="edit-form">
+          <div className="form-grid">
+            <Field label="방문일" code="dcterms:dateAccepted" name="visited_on" type="date" mono required />
+            <Field label="누구에게서" code="dc:source" name="from_label" placeholder="큰아버지" />
+            <Field label="장소" code="dcterms:spatial" name="location" placeholder="안동 본가 다락" />
+            <Field
+              label="받아온 것"
+              name="note"
+              type="textarea"
+              rows={2}
+              className="span2"
+              placeholder="앨범 5권, 편지 다발 하나, 카세트 3개"
+              help="세는 단위로 적어두면 나중에 빠진 것을 알아챌 수 있습니다."
+            />
           </div>
-          <div className="field">
-            <label htmlFor="from_label">누구에게서</label>
-            <input id="from_label" name="from_label" type="text" placeholder="큰아버지" />
+          <div className="form-actions">
+            <button type="submit" className="jg-btn jg-btn-primary">
+              만들기
+            </button>
           </div>
-          <div className="field">
-            <label htmlFor="location">장소</label>
-            <input id="location" name="location" type="text" placeholder="안동 본가 다락" />
-          </div>
-        </div>
-        <div className="field">
-          <label htmlFor="note">받아온 것</label>
-          <textarea id="note" name="note" rows={2} placeholder="앨범 5권, 편지 다발 하나, 카세트 3개" />
-        </div>
-        <div className="row">
-          <button type="submit" className="btn">
-            만들기
-          </button>
-        </div>
-      </form>
+        </form>
+      </section>
 
-      <section className="stack">
-        <div className="rule" />
-        <h2>지금까지의 수집</h2>
+      <section className="admin-sec">
+        <h2 className="sec-title jg-pixel">지금까지의 수집</h2>
+
         {(acquisitions ?? []).length === 0 ? (
-          <div className="box">
-            <p>아직 수집 기록이 없습니다.</p>
+          <div className="empty">
+            <p className="jg-pixel">아직 수집 기록이 없다</p>
+            <p>위에서 첫 방문을 적어 보세요.</p>
           </div>
         ) : (
-          <div className="stack">
-            {(acquisitions ?? []).map((a) => (
-              <div className="box stack-s" key={a.id}>
-                <div className="row">
-                  <b>{a.visited_on}</b>
-                  {a.from_label && <span className="chip">{a.from_label}</span>}
-                  {a.location && <span className="small dim">{a.location}</span>}
-                  <Link href={`/admin/bundles/new?acquisition=${a.id}`} className="btn small row-end">
-                    묶음 추가
-                  </Link>
-                </div>
-                {a.note && <p className="small">{a.note}</p>}
-                <div className="row">
-                  {(byAcq.get(a.id) ?? []).map((b) => (
-                    <Link key={b.id} href={`/admin/bundles/${b.id}`} className="chip accent">
-                      {b.title}
-                    </Link>
-                  ))}
-                  {(byAcq.get(a.id) ?? []).length === 0 && (
-                    <span className="small dim">묶음 없음</span>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="jg-rtable-wrap">
+            <table className="jg-rtable">
+              <thead>
+                <tr>
+                  <th>방문일</th>
+                  <th>누구에게서</th>
+                  <th>장소</th>
+                  <th>받아온 것</th>
+                  <th>묶음</th>
+                  <th aria-label="할 일" />
+                </tr>
+              </thead>
+              <tbody>
+                {(acquisitions ?? []).map((a) => {
+                  const made = byAcq.get(a.id) ?? [];
+                  return (
+                    <tr key={a.id}>
+                      <td className="is-mono is-title">{a.visited_on}</td>
+                      <td>{a.from_label || '—'}</td>
+                      <td className="is-muted">{a.location || '—'}</td>
+                      <td className="is-muted">{a.note || '—'}</td>
+                      <td>
+                        {/* 묶음이 이 세션에 달려 있는지가 한눈에 보여야 한다.
+                            비어 있으면 아직 아무것도 기술되지 않은 방문이다. */}
+                        {made.length === 0 ? (
+                          <span className="is-muted">묶음 없음</span>
+                        ) : (
+                          <ul className="jg-chips">
+                            {made.map((b) => (
+                              <li key={b.id}>
+                                <Link href={`/admin/bundles/${b.id}`}>{b.title}</Link>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                      <td>
+                        <Link
+                          href={`/admin/bundles/new?acquisition=${a.id}`}
+                          className="jg-btn jg-btn-secondary"
+                        >
+                          묶음 추가
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }

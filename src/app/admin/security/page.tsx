@@ -1,9 +1,12 @@
 import Link from 'next/link';
 import { requireAdmin } from '@/lib/access';
-import { totpState, pendingSecret, beginEnrollment } from '@/lib/two-factor';
+import { totpState, pendingSecret } from '@/lib/two-factor';
 import { otpauthUri, formatSecret } from '@/lib/totp';
 import { db } from '@/lib/db';
 import QRCode from 'qrcode';
+import Field from '@/components/admin/Field';
+import Notice from '@/components/admin/Notice';
+import StatusBadge from '@/components/admin/StatusBadge';
 import { startEnrollment, confirmEnrollment, turnOffTotp, newRecoveryCodes } from '../actions';
 
 export const dynamic = 'force-dynamic';
@@ -50,210 +53,234 @@ export default async function SecurityPage({
     .limit(8);
 
   return (
-    <main className="wrap narrow">
-      <section className="stack">
-        <span className="eyebrow">보안</span>
-        <h1>2단계 인증</h1>
-        <p className="lede">
+    <div className="page page-admin">
+      <section className="admin-sec">
+        <h1 className="page-title jg-pixel">2단계 인증</h1>
+        <p className="page-lead">
           비밀번호는 새어나가고, 새어나간 사실을 한동안 모릅니다. 인증 앱의 6자리 코드를 두 번째
           자물쇠로 겁니다.
         </p>
+
+        {error ? <Notice tone="error">{decodeURIComponent(error)}</Notice> : null}
+        {done ? <Notice tone="success">{decodeURIComponent(done)}</Notice> : null}
       </section>
 
-      {error && <div className="callout err">{decodeURIComponent(error)}</div>}
-      {done && (
-        <div
-          className="callout"
-          style={{ borderColor: 'var(--accent)', background: 'var(--accent-bg)', color: 'var(--accent)' }}
-        >
-          {decodeURIComponent(done)}
-        </div>
-      )}
-
       {recoveryCodes && (
-        <div className="box stack">
-          <h3>복구 코드 — 지금 옮겨 적으세요</h3>
-          <p className="small">
-            휴대폰을 잃어버렸을 때 들어올 수 있는 유일한 길입니다. <b>이 화면을 벗어나면 다시 볼
-            수 없습니다.</b> 한 코드는 한 번만 씁니다.
-          </p>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))',
-              gap: '0.4rem',
-            }}
-          >
+        <section className="admin-sec">
+          <h2 className="sec-title jg-pixel">복구 코드 — 지금 옮겨 적으세요</h2>
+          {/* 되돌릴 수 없는 일이라 가장 무거운 상자로 말한다. 이 코드는
+              해시로만 저장되므로 화면을 떠나면 서버도 원문을 모른다. */}
+          <Notice tone="error" title="이 화면을 벗어나면 다시 볼 수 없습니다">
+            휴대폰을 잃어버렸을 때 들어올 수 있는 유일한 길입니다. 한 코드는 한 번만 씁니다.
+          </Notice>
+          <ul className="jg-chips">
             {recoveryCodes.map((c) => (
-              <span key={c} className="chip" style={{ justifyContent: 'center', fontSize: 14 }}>
-                {c}
-              </span>
+              <li key={c}>
+                <code>{c}</code>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
 
       {/* ---------------- 상태에 따른 화면 ---------------- */}
 
       {!state.enrolled && (
-        <div className="box stack">
-          <div className="row">
-            <h3>꺼져 있음</h3>
-            <span className="chip warn row-end">비밀번호만으로 들어올 수 있음</span>
-          </div>
-          <p className="small">
+        <section className="admin-sec">
+          {/* 켜짐·꺼짐은 색이 아니라 네모의 모양으로 가른다 — 이 화면에는
+              강조색이 없다. 빈 네모가 꺼진 것이다. */}
+          <h2 className="sec-title jg-pixel">
+            꺼져 있음 <StatusBadge level="private" label="비밀번호만으로 들어올 수 있음" />
+          </h2>
+          <p className="page-lead">
             켜면 로그인할 때 아이디·비밀번호 다음에 인증 앱 코드를 한 번 더 묻습니다.
             Google Authenticator, 1Password, Authy 등 어떤 TOTP 앱이든 됩니다.
           </p>
-          <form action={startEnrollment}>
-            <button type="submit" className="btn">
-              2단계 인증 켜기
-            </button>
+          <form action={startEnrollment} className="form-actions">
+            <button type="submit" className="jg-btn jg-btn-primary">2단계 인증 켜기</button>
           </form>
-        </div>
+        </section>
       )}
 
       {state.enrolled && !state.activated && secret && (
-        <div className="box stack">
-          <h3>1. 인증 앱에 등록</h3>
-          <p className="small">Google Authenticator 를 열고 QR 을 찍으세요.</p>
+        <>
+          <section className="admin-sec">
+            <h2 className="sec-title jg-pixel">1. 인증 앱에 등록</h2>
+            <p className="page-lead">Google Authenticator 를 열고 QR 을 찍으세요.</p>
 
-          {qrDataUrl && (
-            <span
-              className="tile"
-              style={{ width: 220, height: 220, alignSelf: 'flex-start', background: '#FFFFFF' }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrDataUrl} alt="2단계 인증 QR 코드" width={220} height={220} />
-            </span>
-          )}
+            {qrDataUrl && (
+              // QR 은 흰 바탕에서만 읽힌다 — 화면 배경이 무엇이든 여기만
+              // 흰 종이를 깐다.
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 'fit-content',
+                  padding: 8,
+                  background: '#FFFFFF',
+                  border: '2px solid var(--ink)',
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrDataUrl} alt="2단계 인증 QR 코드" width={220} height={220} />
+              </span>
+            )}
 
-          <div className="panel">
-            <h5>QR 을 찍을 수 없다면 직접 입력</h5>
-            <p style={{ fontSize: 14, letterSpacing: '0.08em', wordBreak: 'break-all' }}>
-              {formatSecret(secret)}
+            <dl className="jg-meta">
+              <div className="jg-meta-row">
+                <dt className="jg-meta-key">
+                  <span className="jg-meta-name">비밀 키</span>
+                  <span className="jg-meta-code">secret</span>
+                </dt>
+                <dd className="jg-meta-val is-mono">{formatSecret(secret)}</dd>
+              </div>
+              <div className="jg-meta-row">
+                <dt className="jg-meta-key">
+                  <span className="jg-meta-name">계정 이름</span>
+                </dt>
+                <dd className="jg-meta-val">{account}</dd>
+              </div>
+              <div className="jg-meta-row">
+                <dt className="jg-meta-key">
+                  <span className="jg-meta-name">발급자</span>
+                </dt>
+                <dd className="jg-meta-val">{ISSUER}</dd>
+              </div>
+            </dl>
+            <p className="jg-note">QR 을 찍을 수 없다면 이 셋을 앱에 직접 넣습니다.</p>
+          </section>
+
+          <section className="admin-sec">
+            <h2 className="sec-title jg-pixel">2. 코드로 확인</h2>
+            <p className="page-lead">
+              앱에 뜬 6자리를 넣어야 켜집니다. 등록이 제대로 되지 않았는데 켜지면 들어올 길이
+              없어지기 때문입니다.
             </p>
-            <p className="small">계정 이름: {account} · 발급자: {ISSUER}</p>
-          </div>
-
-          <div className="rule" />
-
-          <h3>2. 코드로 확인</h3>
-          <p className="small">
-            앱에 뜬 6자리를 넣어야 켜집니다. 등록이 제대로 되지 않았는데 켜지면 들어올 길이
-            없어지기 때문입니다.
-          </p>
-          <form action={confirmEnrollment} className="row">
-            <input
-              name="code"
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="000000"
-              required
-              style={{ maxWidth: '8rem', letterSpacing: '0.2em', textAlign: 'center' }}
-            />
-            <button type="submit" className="btn">
-              확인하고 켜기
-            </button>
-          </form>
-        </div>
+            {/* 한 화면에 code 칸이 여럿 설 수 있으므로 id 를 따로 준다.
+                넘어가는 이름(name="code")은 셋 다 같아야 한다. */}
+            <form action={confirmEnrollment} className="edit-form">
+              <div className="form-grid">
+                <Field
+                  id="totp-confirm"
+                  label="인증 앱 코드"
+                  name="code"
+                  mono
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  required
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="jg-btn jg-btn-primary">확인하고 켜기</button>
+              </div>
+            </form>
+          </section>
+        </>
       )}
 
       {state.activated && (
-        <div className="box stack">
-          <div className="row">
-            <h3>켜져 있음</h3>
-            <span className="chip accent row-end">로그인에 코드 필요</span>
-          </div>
-          <p className="small">
-            남은 복구 코드 <b>{state.recoveryRemaining}개</b>
-            {state.recoveryRemaining <= 3 && ' — 곧 떨어집니다. 재발급을 권합니다.'}
-          </p>
+        <>
+          <section className="admin-sec">
+            <h2 className="sec-title jg-pixel">
+              켜져 있음 <StatusBadge level="public" label="로그인에 코드 필요" />
+            </h2>
+            <p className="page-lead">
+              남은 복구 코드 <strong>{state.recoveryRemaining}개</strong>
+              {state.recoveryRemaining <= 3 && ' — 곧 떨어집니다. 재발급을 권합니다.'}
+            </p>
+          </section>
 
-          <div className="rule" />
+          <section className="admin-sec">
+            <h2 className="sec-title jg-pixel">복구 코드 재발급</h2>
+            <p className="page-lead">
+              새로 만들면 이전 코드는 모두 무효가 됩니다. 현재 코드를 한 번 확인합니다.
+            </p>
+            <form action={newRecoveryCodes} className="edit-form">
+              <div className="form-grid">
+                <Field
+                  id="totp-reissue"
+                  label="인증 앱 코드"
+                  name="code"
+                  mono
+                  inputMode="numeric"
+                  maxLength={9}
+                  placeholder="000000"
+                  required
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="jg-btn jg-btn-secondary">재발급</button>
+              </div>
+            </form>
+          </section>
 
-          <h3>복구 코드 재발급</h3>
-          <p className="small">
-            새로 만들면 이전 코드는 모두 무효가 됩니다. 현재 코드를 한 번 확인합니다.
-          </p>
-          <form action={newRecoveryCodes} className="row">
-            <input
-              name="code"
-              type="text"
-              inputMode="numeric"
-              maxLength={9}
-              placeholder="000000"
-              required
-              style={{ maxWidth: '8rem', letterSpacing: '0.2em', textAlign: 'center' }}
-            />
-            <button type="submit" className="btn ghost">
-              재발급
-            </button>
-          </form>
-
-          <div className="rule" />
-
-          <h3>끄기</h3>
-          <p className="small">
-            끄면 비밀번호 하나만으로 들어올 수 있게 됩니다. 권하지 않습니다.
-          </p>
-          <form action={turnOffTotp} className="row">
-            <input
-              name="code"
-              type="text"
-              inputMode="numeric"
-              maxLength={9}
-              placeholder="000000"
-              required
-              style={{ maxWidth: '8rem', letterSpacing: '0.2em', textAlign: 'center' }}
-            />
-            <button type="submit" className="btn ghost">
-              2단계 인증 끄기
-            </button>
-          </form>
-        </div>
+          <section className="admin-sec">
+            <h2 className="sec-title jg-pixel">끄기</h2>
+            <Notice tone="error" title="끄면 자물쇠가 하나만 남습니다">
+              비밀번호 하나만으로 들어올 수 있게 됩니다. 권하지 않습니다.
+            </Notice>
+            <form action={turnOffTotp} className="edit-form">
+              <div className="form-grid">
+                <Field
+                  id="totp-off"
+                  label="인증 앱 코드"
+                  name="code"
+                  mono
+                  inputMode="numeric"
+                  maxLength={9}
+                  placeholder="000000"
+                  required
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="jg-btn jg-btn-text">2단계 인증 끄기</button>
+              </div>
+            </form>
+          </section>
+        </>
       )}
 
-      <section className="stack">
-        <div className="rule" />
-        <h2>최근 접속 시도</h2>
-        <div className="tw">
-          <table>
-            <thead>
-              <tr>
-                <th>시각</th>
-                <th>주소</th>
-                <th>아이디</th>
-                <th>결과</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(attempts ?? []).map((a, i) => (
-                <tr key={i}>
-                  <td className="dim">{new Date(a.at).toLocaleString('ko-KR')}</td>
-                  <td className="dim">{a.ip}</td>
-                  <td className="dim">{a.username ?? '—'}</td>
-                  <td style={{ color: a.succeeded ? 'var(--accent)' : 'var(--danger)' }}>
-                    {a.succeeded ? '성공' : '실패'}
-                  </td>
-                </tr>
-              ))}
-              {(attempts ?? []).length === 0 && (
+      <section className="admin-sec">
+        <h2 className="sec-title jg-pixel">최근 접속 시도</h2>
+        {(attempts ?? []).length === 0 ? (
+          <div className="empty">
+            <p className="jg-pixel">기록 없음</p>
+          </div>
+        ) : (
+          <div className="jg-rtable-wrap">
+            <table className="jg-rtable">
+              <thead>
                 <tr>
-                  <td colSpan={4} className="dim">
-                    기록 없음
-                  </td>
+                  <th>시각</th>
+                  <th>주소</th>
+                  <th>아이디</th>
+                  <th>결과</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {(attempts ?? []).map((a, i) => (
+                  <tr key={i}>
+                    <td className="is-mono is-muted">{new Date(a.at).toLocaleString('ko-KR')}</td>
+                    <td className="is-mono is-muted">{a.ip}</td>
+                    <td className="is-muted">{a.username ?? '—'}</td>
+                    {/* 성공·실패도 네모의 모양으로 가른다. 채운 네모가 성공. */}
+                    <td>
+                      <StatusBadge
+                        level={a.succeeded ? 'public' : 'private'}
+                        label={a.succeeded ? '성공' : '실패'}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
-      <Link href="/admin" className="small">
-        ← 작업 대기열
-      </Link>
-    </main>
+      <div className="form-actions">
+        <Link href="/admin" className="jg-btn jg-btn-text">← 작업 대기열</Link>
+      </div>
+    </div>
   );
 }

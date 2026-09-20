@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/access';
 import { thumbsFor } from '@/lib/queries';
-import { ItemTile } from '@/components/ItemTile';
-import { TYPE_LABELS } from '@/components/icons';
+import { num } from '@/lib/ui';
+import type { AccessLevel } from '@/lib/session';
+import StatusBadge from '@/components/admin/StatusBadge';
+import { Thumb, TypeTag } from '@/components/search/parts';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,80 +47,112 @@ export default async function AdminHome() {
   const needsWork = recentRes.data ?? [];
   const thumbs = await thumbsFor(needsWork.map((i) => i.id));
 
+  // 숫자 다섯은 성적표가 아니라 할 일의 크기다. 카드로 흩어놓으면 서로
+  // 견줄 수 없어서, 한 줄에 한 항목씩 표로 세운다.
+  const counts = [
+    { key: '전체 자료', n: totalRes.count ?? 0, note: '버리지 않은 것 전부' },
+    { key: '묶음', n: bundleRes.count ?? 0, note: '앨범·테이프 같은 원본 단위' },
+    { key: '시기 미상', n: undatedRes.count ?? 0, note: '연표에 나타나지 못하는 자료' },
+    { key: '설명 없음', n: untitledRes.count ?? 0, note: '무엇인지 적지 않은 자료' },
+    { key: '대표 표시', n: unfeaturedRes.count ?? 0, note: '첫 화면에 걸릴 수 있는 자료' },
+  ];
+
   return (
-    <main className="wrap">
-      <section className="stack">
-        <span className="eyebrow">작업 대기열</span>
-        <h1>무엇이 아직 남았나</h1>
-        <p className="lede">
+    <div className="page page-admin">
+      <section className="admin-sec">
+        <h1 className="page-title jg-pixel">무엇이 아직 남았나</h1>
+        <p className="page-lead">
           자료를 넣는 것과 기술하는 것은 다른 일입니다. 여기 남아 있는 것이 곧 할 일입니다.
         </p>
+
+        <div className="jg-rtable-wrap">
+          <table className="jg-rtable">
+            <thead>
+              <tr>
+                <th>항목</th>
+                <th>수</th>
+                <th>뜻</th>
+              </tr>
+            </thead>
+            <tbody>
+              {counts.map((c) => (
+                <tr key={c.key}>
+                  <td className="is-title">{c.key}</td>
+                  <td className="is-mono">{num(c.n)}</td>
+                  <td className="is-muted">{c.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="form-actions">
+          <Link href="/admin/acquisitions" className="jg-btn jg-btn-primary">
+            수집 세션 만들기
+          </Link>
+          <Link href="/admin/bundles" className="jg-btn jg-btn-secondary">
+            묶음 목록
+          </Link>
+        </div>
       </section>
 
-      <div className="statgrid">
-        <div className="stat">
-          <div className="n">{totalRes.count ?? 0}</div>
-          <div className="k">전체 자료</div>
-        </div>
-        <div className="stat">
-          <div className="n">{bundleRes.count ?? 0}</div>
-          <div className="k">묶음</div>
-        </div>
-        <div className="stat">
-          <div className="n" style={{ color: 'var(--warn)' }}>{undatedRes.count ?? 0}</div>
-          <div className="k">시기 미상</div>
-        </div>
-        <div className="stat">
-          <div className="n" style={{ color: 'var(--muted)' }}>{untitledRes.count ?? 0}</div>
-          <div className="k">설명 없음</div>
-        </div>
-        <div className="stat">
-          <div className="n" style={{ color: 'var(--accent)' }}>{unfeaturedRes.count ?? 0}</div>
-          <div className="k">대표 표시</div>
-        </div>
-      </div>
-
-      <div className="row">
-        <Link href="/admin/acquisitions" className="btn">
-          수집 세션 만들기
-        </Link>
-        <Link href="/admin/bundles" className="btn ghost">
-          묶음 목록
-        </Link>
-      </div>
-
-      <section className="stack">
-        <div className="rule" />
-        <h2>시기가 비어 있는 자료</h2>
-        <p className="small">
+      <section className="admin-sec">
+        <h2 className="sec-title jg-pixel">시기가 비어 있는 자료</h2>
+        <p className="jg-note">
           시기가 없으면 연표에 나타나지 못합니다. 묶음 단위로 한꺼번에 채우는 편이 빠릅니다.
         </p>
+
         {needsWork.length === 0 ? (
-          <div className="box">
-            <p>비어 있는 자료가 없습니다. 기술이 모두 끝났습니다.</p>
+          <div className="empty">
+            <p className="jg-pixel">비어 있는 자료가 없다</p>
+            <p>기술이 모두 끝났습니다.</p>
           </div>
         ) : (
-          <div className="grid">
-            {needsWork.map((i) => (
-              <div className="cell" key={i.id}>
-                <Link href={`/admin/items/${i.id}`}>
-                  <ItemTile
-                    id={i.id}
-                    title={i.title}
-                    type={i.type}
-                    accessLevel={i.access_level}
-                    visible
-                    thumbFileId={thumbs.get(i.id)}
-                    aspect="1"
-                  />
-                </Link>
-                <span className="cap">{i.title}</span>
-                <span className="cap dim">{TYPE_LABELS[i.type] ?? i.type}</span>
-              </div>
-            ))}
+          <div className="jg-rtable-wrap">
+            <table className="jg-rtable">
+              <thead>
+                <tr>
+                  {/* 그림 칸은 머리글을 비운다 — 읽어줄 이름이 없는 칸이다. */}
+                  <th aria-label="그림" />
+                  <th>자료</th>
+                  <th>형태</th>
+                  <th>공개 범위</th>
+                  <th>들어온 날</th>
+                </tr>
+              </thead>
+              <tbody>
+                {needsWork.map((i) => (
+                  <tr key={i.id}>
+                    <td>
+                      {/* 자료 고르기 화면과 같은 56×42 칸. 표 안에서 크기를
+                          정해주지 않으면 Thumb 이 높이를 잡지 못한다. */}
+                      <div className="jg-picker-thumb">
+                        <Thumb
+                          src={thumbs.has(i.id) ? `/media/${thumbs.get(i.id)}` : null}
+                          type={i.type}
+                          alt={i.title}
+                        />
+                      </div>
+                    </td>
+                    <td className="is-title">
+                      <Link href={`/admin/items/${i.id}`}>{i.title}</Link>
+                    </td>
+                    <td>
+                      <TypeTag type={i.type} />
+                    </td>
+                    <td>
+                      <StatusBadge level={i.access_level as AccessLevel} />
+                    </td>
+                    <td className="is-mono is-muted">
+                      {i.submitted_at ? String(i.submitted_at).slice(0, 10) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }
