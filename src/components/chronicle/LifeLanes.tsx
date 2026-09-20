@@ -30,6 +30,9 @@ export default function LifeLanes({
 }) {
   const span = to - from || 1;
   const x = (v: number) => Math.max(0, Math.min(100, ((v - from) / span) * 100));
+  // 거꾸로 된 구간(to < from)은 음수 너비가 되고, CSS 가 그걸 무시해 auto 로
+  // 떨어지면 띠 하나가 레인 전체를 덮는다. 손으로 넣는 값이라 실제로 생긴다.
+  const w = (a: number, b: number) => Math.max(0, x(b) - x(a));
 
   const ticks: number[] = [];
   for (let t = Math.ceil(from / 10) * 10; t <= to; t += 10) ticks.push(t);
@@ -64,7 +67,7 @@ export default function LifeLanes({
               {p.born ? (
                 <span
                   className="jg-lanes-life"
-                  style={{ left: `${x(p.born)}%`, width: `${x(p.died ?? to) - x(p.born)}%` }}
+                  style={{ left: `${x(p.born)}%`, width: `${w(p.born, p.died ?? to)}%` }}
                 />
               ) : null}
 
@@ -72,7 +75,7 @@ export default function LifeLanes({
                 <span
                   key={`p${j}`}
                   className={cx('jg-lanes-period', j % 2 === 1 && 'is-alt')}
-                  style={{ left: `${x(s.from)}%`, width: `${x(s.to) - x(s.from)}%` }}
+                  style={{ left: `${x(s.from)}%`, width: `${w(s.from, s.to)}%` }}
                   title={`${s.label} ${s.from}–${s.to}`}
                 >
                   {s.label}

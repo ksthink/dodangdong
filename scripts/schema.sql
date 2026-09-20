@@ -602,7 +602,10 @@ alter table item
   add constraint item_date_verified_by_not_self
     check (date_verified_by is null or date_verified_by <> id);
 
--- 근거가 달려 있는데 확인되지 않은 상태는 없다. 둘은 함께 세운다.
+-- 근거가 달려 있는데 확인되지 않은 상태는 없다. 둘은 함께 세우고 함께 내린다 —
+-- 확인을 취소하는 쪽에서 date_verified 만 끄고 date_verified_by 를 남기면
+-- 여기서 막힌다. 기술 화면과 일괄 수정은 { date_verified: false,
+-- date_verified_by: null } 을 함께 보내야 한다.
 alter table item
   add constraint item_date_verified_consistent
     check (date_verified or date_verified_by is null);
@@ -648,7 +651,10 @@ create table life_period (
   to_year    integer,
   sort_order integer not null default 0,
   note       text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- 거꾸로 된 구간은 레인에서 음수 너비가 되고, CSS 가 그걸 무시해 띠 하나가
+  -- 줄 전체를 덮는다. 손으로 넣는 값이라 실제로 생긴다 — 들어오기 전에 막는다.
+  constraint life_period_order check (from_year is null or to_year is null or from_year <= to_year)
 );
 
 comment on table life_period is
@@ -705,6 +711,10 @@ comment on table world_event is
   '그해의 큰 사회적 사건. 집안 기록의 배경으로만 쓴다 — 검색 대상이 아니고 기록과 같은 무게로 보여주지 않는다.';
 
 create index world_event_year_idx on world_event (year, sort_order);
+
+-- 같은 해에 같은 사건을 두 번 넣지 않는다. 손으로 넣는 표라 실제로 생기고,
+-- 그러면 연표에 같은 줄이 두 번 나온다.
+create unique index world_event_unique_idx on world_event (year, label);
 
 -- ---------------------------------------------------------------- 뷰 갱신
 --

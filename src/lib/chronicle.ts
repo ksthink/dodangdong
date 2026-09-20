@@ -141,7 +141,19 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
     supabase.from('world_event').select('year, label').order('year').order('sort_order'),
   ]);
 
-  if (itemsRes.error) throw new Error(`연표 조회 실패: ${itemsRes.error.message}`);
+  // 넷 다 똑같이 던진다. 하나만 검사하고 나머지를 `?? []` 로 삼키면,
+  // 실패가 "빈 결과"와 구별되지 않는다 — 연표는 에러도 로그도 없이
+  // 절반만 그려지고, 원인을 찾을 실마리가 남지 않는다.
+  // (가장 흔한 경우: 마이그레이션을 아직 올리지 않은 채로 배포해
+  //  person 질의가 born_year 열 부재로 실패하는 것.)
+  for (const [what, res] of [
+    ['자료', itemsRes],
+    ['인물', peopleRes],
+    ['생애 시기', periodsRes],
+    ['바깥 세상', worldRes],
+  ] as const) {
+    if (res.error) throw new Error(`연표 ${what} 조회 실패: ${res.error.message}`);
+  }
 
   const items = (itemsRes.data ?? []) as ItemRow[];
   const people = peopleRes.data ?? [];
@@ -188,7 +200,7 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
 
   // ── 레인 ────────────────────────────────────────────────────
   // 사람마다 한 줄. 그 사람이 등장하거나 만든 자료를 점으로 찍는다.
-  const personItems = await itemsByPerson(items.map((i) => i.id));
+  const personItems = await itemsByPerson(people.map((p) => p.id));
 
   const lanes: Lane[] = people
     .filter((p) => p.born_year !== null)
@@ -307,14 +319,22 @@ function toEntry(it: ItemRow, role: Role): YearEntry {
   };
 }
 
-/** 그 사람이 나오거나 만든 자료의 id 집합을 사람별로 모은다. */
-async function itemsByPerson(itemIds: string[]): Promise<Map<string, Set<string>>> {
+/**
+ * 그 사람이 나오거나 만든 자료의 id 집합을 사람별로 모은다.
+ *
+ * 자료 id 가 아니라 사람 id 로 좁힌다. PostgREST 는 `.in()` 목록을 URL 질의
+ * 문자열에 싣는데, uuid 하나가 36자라 자료 3,000건이면 URL 이 100KB 를 넘어
+ * 프록시의 요청 라인 한계에 걸려 갑자기 400 으로 죽는다. 사람 수는 한 집안
+ * 규모로 묶여 있으므로 이쪽을 기준으로 삼으면 천장이 없다.
+ */
+async function itemsByPerson(personIds: string[]): Promise<Map<string, Set<string>>> {
   const map = new Map<string, Set<string>>();
-  if (itemIds.length === 0) return map;
-  const { data } = await db()
+  if (personIds.length === 0) return map;
+  const { data, error } = await db()
     .from('item_person')
     .select('item_id, person_id')
-    .in('item_id', itemIds);
+    .in('person_id', personIds);
+  if (error) throw new Error(`연표 인물-자료 연결 조회 실패: ${error.message}`);
   for (const r of data ?? []) {
     if (!map.has(r.person_id)) map.set(r.person_id, new Set());
     map.get(r.person_id)!.add(r.item_id);
