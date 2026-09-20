@@ -38,6 +38,12 @@ export interface ItemRow {
   publisher: string | null;
   medium: string | null;
   extent: string | null;
+  /** 실물이 지금 어디 있는가. 채워져 있으면 "실물 원본" 인장이 붙는다. */
+  physical_location: string | null;
+  /** 다음에 꺼낼 때 무엇을 조심해야 하는가. */
+  physical_condition: string | null;
+  /** 기계 학습에 쓰지 않는다는 표시. 기본이 참이다. */
+  ai_optout: boolean;
   language: string | null;
   source: string | null;
   provenance: string | null;

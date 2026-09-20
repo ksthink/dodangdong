@@ -10,6 +10,7 @@ import Notice from '@/components/admin/Notice';
 import Checkbox from '@/components/admin/Checkbox';
 import StatusBadge from '@/components/admin/StatusBadge';
 import { DateValue, TypeTag } from '@/components/search/parts';
+import PersonPicker, { type PersonOption, type PersonPick } from '@/components/curation/PersonPicker';
 import {
   updateItem,
   linkPerson,
@@ -18,6 +19,8 @@ import {
   archiveItem,
   setItemSubjects,
   setItemPeriods,
+  setItemPeople,
+  setItemCreator,
 } from '../../actions';
 
 export const dynamic = 'force-dynamic';
@@ -32,6 +35,35 @@ const PERSON_ROLES = [
 ] as const;
 
 const ROLE_LABELS: Record<string, string> = Object.fromEntries(PERSON_ROLES);
+
+/**
+ * item_effective 에는 있으나 ItemRow(queries.ts)에는 아직 없는 열. 그 타입은
+ * 다른 화면들이 함께 쓰므로 여기서 고치지 않고, 같은 행에서 이 화면이
+ * 필요한 만큼만 따로 읽는다.
+ */
+interface AuthorityCols {
+  /** 전거에 등록된 생산자. */
+  creator_id: string | null;
+  /** 등록하지 않고 이름만 적어 둔 등장인물. */
+  subject_names: string[] | null;
+}
+
+/** person 행을 PersonPicker 가 읽는 꼴로. */
+function toOption(p: {
+  id: string;
+  display_name: string;
+  aliases?: string[] | null;
+  born_year?: number | null;
+  died_year?: number | null;
+}): PersonOption {
+  return {
+    id: p.id,
+    name: p.display_name,
+    aliases: p.aliases ?? [],
+    born: p.born_year ?? null,
+    died: p.died_year ?? null,
+  };
+}
 
 const TYPES = [
   { value: 'StillImage', label: '사진' },
@@ -64,7 +96,12 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
   const [{ data: bundle }, { data: allPeople }, { data: allCollections }, { data: places }] =
     await Promise.all([
       supabase.from('bundle').select('*').eq('id', item.bundle_id).single(),
-      supabase.from('person').select('id, display_name').order('display_name'),
+      // PersonPicker 는 이름만이 아니라 다른 이름·생몰로도 찾는다. 같은
+      // 이름이 둘일 때 생몰이 없으면 어느 쪽인지 고를 수 없다.
+      supabase
+        .from('person')
+        .select('id, display_name, aliases, born_year, died_year')
+        .order('display_name'),
       supabase.from('collection').select('id, title').order('title'),
       supabase.from('place').select('id, family_name').order('family_name'),
     ]);
@@ -91,7 +128,41 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
     { value: '', label: '— 이야기 —' },
     ...(allCollections ?? []).map((c) => ({ value: String(c.id), label: String(c.title) })),
   ];
-  const roleOptions = PERSON_ROLES.map(([value, label]) => ({ value, label }));
+  // '찍힘'은 위의 등장인물 칸이 다룬다. 여기 두면 같은 연결을 두 곳에서
+  // 만들게 되고, 한쪽에서 저장할 때 다른 쪽이 지운다.
+  const roleOptions = PERSON_ROLES.filter(([value]) => value !== 'depicted').map(
+    ([value, label]) => ({ value, label }),
+  );
+
+  // 전거에서 고르는 칸이 쓰는 것들.
+  const authority = item as unknown as AuthorityCols;
+  const pickerOptions: PersonOption[] = (allPeople ?? []).map((p) =>
+    toOption({
+      id: String(p.id),
+      display_name: String(p.display_name),
+      aliases: (p.aliases as string[] | null) ?? [],
+      born_year: p.born_year as number | null,
+      died_year: p.died_year as number | null,
+    }),
+  );
+  const byId = new Map(pickerOptions.map((o) => [o.id, o]));
+
+  // 지금 걸려 있는 등장인물. 등록된 사람은 칩으로, 이름만 적어 둔 것은
+  // 점선 칩으로 돌아온다 — 다시 저장해도 적어 둔 것이 사라지지 않게.
+  const peoplePicks: PersonPick[] = [
+    ...people
+      .filter((p) => p.role === 'depicted')
+      .map((p) => ({ id: p.id, name: p.display_name })),
+    ...(authority.subject_names ?? []).map((n) => ({ name: n })),
+  ];
+
+  // 생산자는 한 사람이다. 전거에 있으면 그 사람, 없으면 적어 둔 이름.
+  const creatorPerson = authority.creator_id ? byId.get(authority.creator_id) : undefined;
+  const creatorPick: PersonPick[] = creatorPerson
+    ? [{ id: creatorPerson.id, name: creatorPerson.name }]
+    : item.creator
+      ? [{ name: item.creator }]
+      : [];
 
   return (
     <div className="page page-admin">
@@ -215,12 +286,7 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
               className="span2"
               defaultValue={item.description ?? ''}
             />
-            <Field
-              label="기록자"
-              code="dc:creator"
-              name="creator"
-              defaultValue={item.creator ?? ''}
-            />
+            {/* 생산자는 전거에서 고르는 칸이라 폼이 따로다(아래 "생산자"). */}
             <Field label="매체" code="dc:medium" name="medium" defaultValue={item.medium ?? ''} />
             <Field
               label="크기·길이"
@@ -295,6 +361,34 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
           <div className="form-actions">
             <button type="submit" className="jg-btn jg-btn-primary">
               저장
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="admin-sec">
+        <h2 className="sec-title jg-pixel">생산자</h2>
+        {/* 이 기록을 만든 사람. 한 사람이다.
+
+            등록된 사람이면 전거에서 고른다 — 그래야 그가 찍은 사진들이 그의
+            인물 페이지에 모인다. 군청·사진관 같은 기관이나 끝내 누구인지 모르는
+            경우에만 이름만 적어 둔다(점선 칩). */}
+        <form action={setItemCreator} className="edit-form">
+          <input type="hidden" name="item_id" value={id} />
+          <PersonPicker
+            name="creator"
+            label="생산자"
+            code="dc:creator"
+            options={pickerOptions}
+            defaultValue={creatorPick}
+            multiple={false}
+            allowLoose
+            placeholder="이름·호칭으로 찾기"
+            help="등록된 사람이면 골라 주세요. 기관이나 미상은 이름만 적습니다."
+          />
+          <div className="form-actions">
+            <button type="submit" className="jg-btn jg-btn-secondary">
+              생산자 저장
             </button>
           </div>
         </form>
@@ -392,10 +486,36 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
 
       <section className="admin-sec">
         <h2 className="sec-title jg-pixel">등장인물</h2>
-        {/* 연결은 한 인물씩 넣고 뺀다. 칩의 ✕ 하나가 곧 unlinkPerson 폼 하나다. */}
-        {people.length > 0 ? (
+        {/* 찍힌 사람들은 한 칸에서 통째로 다시 세운다 — 분류와 같은 방식이다.
+            하나씩 넣고 빼면 "지금 누가 걸려 있는가"를 사람이 머리로 셈해야 한다.
+
+            명단에 없는 사람은 그 자리에서 이름만으로 등록한다. 사진을 정리하다
+            모르는 이름이 나왔다고 인물 등록 화면으로 갔다 오게 하면 하던 일을
+            잃는다. 기관이나 끝내 모르는 사람은 등록하지 않고 이름만 적어 둔다. */}
+        <form action={setItemPeople} className="edit-form">
+          <input type="hidden" name="item_id" value={id} />
+          <PersonPicker
+            name="people"
+            label="등장인물"
+            code="dc:subject"
+            options={pickerOptions}
+            defaultValue={peoplePicks}
+            allowLoose
+            help="찍힌 사람들입니다. 여기서 연결한 사람의 인물 페이지에 이 기록이 나옵니다."
+          />
+          <div className="form-actions">
+            <button type="submit" className="jg-btn jg-btn-secondary">
+              등장인물 저장
+            </button>
+          </div>
+        </form>
+
+        {/* 찍음·씀·받음 같은 나머지 역할. 위 칸은 '찍힘'만 다루므로, 그것까지
+            한 칸에 담으면 누가 어떤 자격으로 걸렸는지 알 수 없어진다. */}
+        <h3 className="jg-field-name">그 밖의 역할</h3>
+        {people.filter((p) => p.role !== 'depicted').length > 0 ? (
           <ul className="jg-chips">
-            {people.map((p) => (
+            {people.filter((p) => p.role !== 'depicted').map((p) => (
               <li key={`${p.id}-${p.role}`}>
                 {p.display_name}
                 <span className="jg-tag-code"> {ROLE_LABELS[p.role] ?? p.role}</span>
@@ -415,7 +535,7 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
             ))}
           </ul>
         ) : (
-          <p className="jg-note">연결된 인물이 없습니다.</p>
+          <p className="jg-note">그 밖의 역할로 걸린 인물이 없습니다.</p>
         )}
 
         <form action={linkPerson} className="edit-form">
@@ -423,7 +543,7 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
           <div className="form-grid">
             <Field
               label="인물"
-              code="dc:subject"
+              code="dc:contributor"
               name="person_id"
               type="select"
               options={personOptions}
@@ -434,7 +554,7 @@ export default async function AdminItemPage({ params }: { params: Promise<{ id: 
               name="role"
               type="select"
               options={roleOptions}
-              defaultValue="depicted"
+              defaultValue="photographer"
             />
           </div>
           <div className="form-actions">

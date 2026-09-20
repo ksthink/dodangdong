@@ -157,7 +157,8 @@ export async function updateItem(formData: FormData) {
     type: String(formData.get('type')),
     doc_type: nz(formData.get('doc_type')),
     description: nz(formData.get('description')),
-    creator: nz(formData.get('creator')),
+    // 생산자는 여기서 다루지 않는다 — 전거에서 고르는 칸이라 폼이 따로다
+    // (setItemCreator). 여기에 두면 기술을 저장할 때마다 빈 값으로 덮어쓴다.
     medium: nz(formData.get('medium')),
     extent: nz(formData.get('extent')),
     language: nz(formData.get('language')),
@@ -1015,4 +1016,134 @@ export async function removeRelation(formData: FormData) {
   revalidatePath(`/people/${other}`);
   revalidatePath('/people');
   toPerson(back, { done: '가족 관계를 끊었습니다.' });
+}
+
+// ---------------------------------------------------------------- 인물 전거 연결
+//
+// 사람은 기록마다 이름을 새로 쓰지 않고, 한 번 등록해 두고 가리킨다.
+// 그래야 "할머니", "김순자", "안동댁"이 한 사람으로 모이고, 연표·나이·
+// 인물 페이지가 저절로 만들어진다.
+//
+// 화면의 PersonPicker 는 고른 결과를 세 갈래로 뱉는다. 등록된 사람은 id 로,
+// 그 자리에서 새로 만들 사람은 `_new` 에 이름으로, 끝내 등록하지 않을 사람
+// (기관·모르는 사람·미상)은 `_loose` 에 이름으로. 아래 두 액션이 그 셋을
+// 받는 자리다.
+
+/**
+ * `_new` 로 온 이름들을 person 에 세우고 id 를 돌려준다.
+ *
+ * 이름만 넣는다. 나머지(생몰·호칭·관계)는 나중에 인물 화면에서 채운다 —
+ * 사진을 정리하다 모르는 이름이 나왔다고 해서 인물 등록 화면으로 갔다
+ * 오게 하면 하던 일을 잃는다. 비어 있는 인물이 하나 느는 편이 낫다.
+ *
+ * 같은 이름이 이미 있으면 그 사람을 쓴다. 한 번 등록해 두고 가리키자는
+ * 것이 전거인데, 여기서 동명이인을 새로 만들면 도로 흩어진다.
+ */
+async function ensurePeopleByName(names: string[]): Promise<string[]> {
+  const wanted = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+  if (wanted.length === 0) return [];
+
+  const supabase = db();
+  const { data: found } = await supabase
+    .from('person')
+    .select('id, display_name')
+    .in('display_name', wanted);
+
+  const byName = new Map<string, string>(
+    (found ?? []).map((p) => [String(p.display_name), String(p.id)]),
+  );
+
+  const missing = wanted.filter((n) => !byName.has(n));
+  if (missing.length > 0) {
+    const { data: made, error } = await supabase
+      .from('person')
+      .insert(missing.map((display_name) => ({ display_name })))
+      .select('id, display_name');
+    if (error) throw new Error(`인물 등록 실패: ${error.message}`);
+    for (const p of made ?? []) byName.set(String(p.display_name), String(p.id));
+  }
+
+  return wanted.map((n) => byName.get(n)).filter((v): v is string => Boolean(v));
+}
+
+/**
+ * 등장인물을 통째로 다시 세운다.
+ *
+ * 분류(setItemSubjects)와 같은 방식이다 — 화면이 보낸 것이 곧 결과다.
+ * 하나씩 넣고 빼면 "지금 누가 걸려 있는가"를 사람이 머리로 셈해야 한다.
+ *
+ * 다만 지우는 것은 role='depicted' 뿐이다. 촬영·씀·받음 같은 역할은 이
+ * 칸이 다루지 않으므로, 통째로 비우면 이 화면에 뜨지도 않은 연결이
+ * 조용히 사라진다.
+ */
+export async function setItemPeople(formData: FormData) {
+  await requireAdmin();
+  const supabase = db();
+  const itemId = String(formData.get('item_id') ?? '');
+
+  const picked = formData.getAll('people').map(String).filter(Boolean);
+  const made = await ensurePeopleByName(formData.getAll('people_new').map(String));
+  const ids = [...new Set([...picked, ...made])];
+
+  // 등록하지 않은 이름은 기록 쪽에 둔다 — 가리킬 사람이 없으니 item_person 에
+  // 넣을 수 없다.
+  const loose = [...new Set(formData.getAll('people_loose').map(String).map((s) => s.trim()).filter(Boolean))];
+
+  const { error: clearErr } = await supabase
+    .from('item_person')
+    .delete()
+    .eq('item_id', itemId)
+    .eq('role', 'depicted');
+  if (clearErr) throw new Error(`등장인물 비우기 실패: ${clearErr.message}`);
+
+  if (ids.length > 0) {
+    const { error } = await supabase
+      .from('item_person')
+      .insert(ids.map((person_id) => ({ item_id: itemId, person_id, role: 'depicted' })));
+    if (error) throw new Error(`등장인물 연결 실패: ${error.message}`);
+  }
+
+  const { error: looseErr } = await supabase
+    .from('item')
+    .update({ subject_names: loose })
+    .eq('id', itemId);
+  if (looseErr) throw new Error(`등장인물 이름 적기 실패: ${looseErr.message}`);
+
+  revalidatePath(`/admin/items/${itemId}`);
+  revalidatePath(`/item/${itemId}`);
+  // 연결한 사람의 인물 페이지에 이 기록이 나와야 한다. 전거 연결의 목적이 그것이다.
+  for (const personId of ids) revalidatePath(`/people/${personId}`);
+  revalidatePath('/people');
+  redirect(`/admin/items/${itemId}`);
+}
+
+/**
+ * 생산자.
+ *
+ * 한 기록의 생산자는 한 사람이다. 전거에서 고르면 creator_id 로 가리키고,
+ * 기관이나 미상처럼 등록하지 않을 것이면 item.creator 에 이름만 적는다.
+ * 둘을 같이 채우지 않는다 — 어느 쪽이 참인지 알 수 없어진다.
+ */
+export async function setItemCreator(formData: FormData) {
+  await requireAdmin();
+  const supabase = db();
+  const itemId = String(formData.get('item_id') ?? '');
+
+  const picked = nz(formData.get('creator'));
+  const [made] = await ensurePeopleByName(
+    picked ? [] : formData.getAll('creator_new').map(String),
+  );
+  const creatorId = picked ?? made ?? null;
+  const loose = creatorId ? null : nz(formData.get('creator_loose'));
+
+  const { error } = await supabase
+    .from('item')
+    .update({ creator_id: creatorId, creator: loose })
+    .eq('id', itemId);
+  if (error) throw new Error(`생산자 저장 실패: ${error.message}`);
+
+  revalidatePath(`/admin/items/${itemId}`);
+  revalidatePath(`/item/${itemId}`);
+  if (creatorId) revalidatePath(`/people/${creatorId}`);
+  redirect(`/admin/items/${itemId}`);
 }

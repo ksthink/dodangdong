@@ -52,6 +52,13 @@ export interface Selection {
   subject?: string;
   period?: string;
   q?: string;
+  /**
+   * 한 해만 보기. 연표의 "이 해의 기록 모두 보기 →" 가 여기로 온다.
+   *
+   * 축이 아니라 곁가지로 둔다 — 연도는 이미 연표가 맡고 있고, 찾기 화면의
+   * 네 축을 다섯으로 늘리면 명세가 정한 틀이 무너진다. 주소로만 걸린다.
+   */
+  year?: string;
 }
 
 export type SortKey = 'default' | 'title' | 'newest' | 'oldest' | 'added';
@@ -181,9 +188,14 @@ export async function search(role: Role, sel: Selection, sort: SortKey, page: nu
     it.identifier.toLowerCase().includes(needle);
 
   // 모든 조건을 만족하는 결과
+  // 연도는 created_start 앞 네 글자로 본다. EDTF 원문(1978? · 197X)은
+  // 화면에 그대로 보여주되, 거르는 데에는 유도값을 쓴다.
+  const year = sel.year && /^\d{4}$/.test(sel.year) ? sel.year : undefined;
+
   const hits = all.filter(
     (it) =>
       textHit(it) &&
+      (!year || it.created_start?.slice(0, 4) === year) &&
       matches(it, 'form', sel.form) &&
       matches(it, 'source', sel.source) &&
       matches(it, 'subject', sel.subject) &&

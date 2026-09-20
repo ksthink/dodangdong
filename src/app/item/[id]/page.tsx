@@ -6,6 +6,7 @@ import { num } from '@/lib/ui';
 import MetadataTable from '@/components/record/MetadataTable';
 import RelatedList from '@/components/record/RelatedList';
 import Gallery from '@/components/record/Gallery';
+import ShareRow from '@/components/record/ShareRow';
 import { ClassPath, DateValue, TypeTag } from '@/components/search/parts';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +27,8 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
 
   if (!rec) notFound();
 
-  const { item, meta, photos, original, audio, related, stories, crumbs, transcript } = rec;
+  const { item, meta, photos, original, audio, related, stories, crumbs, terms, transcript } =
+    rec;
 
   return (
     <main className="wrap page-record">
@@ -98,17 +100,44 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
         </section>
       ) : null}
 
+      {/* 이름은 명세대로 "관련 기록"으로 두되, 무엇을 기준으로 골랐는지는
+          덧말로 밝힌다. 이 저장소에는 dc:relation 열이 없어 같은 묶음을
+          기준으로 삼는데, 그 사실을 감추면 "왜 이것만 나오나"가 된다. */}
       {related.length > 0 ? (
-        <RelatedList title="같은 묶음의 기록" code="dc:relation" items={related} />
+        <div className="stack-s">
+          <RelatedList title="관련 기록" code="dc:relation" items={related} />
+          <p className="jg-note">같은 묶음에서 나온 기록입니다.</p>
+        </div>
       ) : null}
 
       {stories.length > 0 ? (
-        <RelatedList
-          title="이 기록이 들어간 이야기"
-          code="dcterms:isPartOf"
-          items={stories.map((s) => ({ title: s.title, href: `/stories/${s.id}` }))}
-        />
+        <div className="stack-s">
+          <RelatedList
+            title="관련 이야기"
+            code="dcterms:isPartOf"
+            items={stories.map((s) => ({ title: s.title, href: `/stories/${s.id}` }))}
+          />
+          <p className="jg-note">이 기록을 엮어 쓴 이야기입니다.</p>
+        </div>
       ) : null}
+
+      {/* 명세의 상세 화면은 이용조건으로 끝난다. 표 14행에도 한 줄이 있지만,
+          내보내도 되는지는 나머지 열세 줄과 같은 무게로 읽혀서는 안 된다. */}
+      <section className="jg-related record-terms">
+        <h2 className="jg-section-title jg-pixel">이용조건</h2>
+        <p className="jg-related-code">dc:rights</p>
+        <p className="record-summary">{terms.access}</p>
+        {terms.rights ? <p className="record-summary">{terms.rights}</p> : null}
+        {terms.aiOptout ? (
+          <p className="record-summary">기계 학습에 쓰지 않습니다.</p>
+        ) : null}
+        {terms.physicalLocation ? (
+          <p className="record-summary">
+            {`실물은 ${terms.physicalLocation}에 있습니다.`}
+            {terms.physicalCondition ? ` 상태: ${terms.physicalCondition}` : ''}
+          </p>
+        ) : null}
+      </section>
 
       <div className="record-actions">
         {original ? (
@@ -116,7 +145,8 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
             {original.label}
           </Link>
         ) : null}
-        {/* 공유 버튼은 두지 않는다 — 가족 사이트다. 주소를 직접 복사한다. */}
+        {/* 공유 버튼은 두지 않는다 — 가족 사이트다. 주소 복사와 인쇄만 둔다. */}
+        <ShareRow />
       </div>
     </main>
   );

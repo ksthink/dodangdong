@@ -29,7 +29,28 @@ export interface RecordDetail {
   stories: { id: string; title: string }[];
   /** 분류 경로 — 페이지 머리의 빵부스러기 */
   crumbs: { label: string; href?: string }[];
+  /** 화면 끝의 이용조건 구획. 표 14행과 같은 사실을 사람이 읽는 말로 푼다. */
+  terms: RecordTerms;
   transcript: { segments: { start_ms: number; end_ms: number; text: string }[] } | null;
+}
+
+/**
+ * 이용조건.
+ *
+ * 표 14행에도 한 줄로 적지만, 화면 끝에 구획을 따로 둔다 — 표의 한 칸은
+ * 나머지 열세 줄과 같은 무게로 읽히는데, 이 기록을 밖으로 내보내도 되는지는
+ * 같은 무게로 읽혀서는 안 되는 사실이다.
+ */
+export interface RecordTerms {
+  /** 공개 범위를 사람이 읽는 말로. */
+  access: string;
+  /** dc:rights 원문. 관리자가 따로 적어 둔 말이 있으면 그대로 옮긴다. */
+  rights: string | null;
+  /** 참이면 기계 학습에 쓰지 않는다. 기본이 참이다(20260920000400_physical.sql). */
+  aiOptout: boolean;
+  /** 실물이 지금 어디 있는가. 디지털 사본이 있다고 종이가 사라지지는 않는다. */
+  physicalLocation: string | null;
+  physicalCondition: string | null;
 }
 
 const ROLE_KO: Record<string, string> = {
@@ -169,6 +190,20 @@ export async function getRecord(role: Role, id: string): Promise<RecordDetail | 
 
   // ── 상세정보 표 ─────────────────────────────────────────────
   const makers = people.filter((p) => MAKER_ROLES.has(p.role) && p.person);
+
+  // 생산자를 전거로 가리켰으면 그 사람의 인물 페이지로 보낸다. 이름 글자만
+  // 적힌 생산자(기관·미상)는 갈 곳이 없으므로 글자로 둔다.
+  const authority = item as unknown as { creator_id: string | null };
+  const creatorRes = authority.creator_id
+    ? await supabase
+        .from('person')
+        .select('id, display_name')
+        .eq('id', authority.creator_id)
+        .maybeSingle()
+    : null;
+  if (creatorRes?.error) throw new Error(`기록 생산자 조회 실패: ${creatorRes.error.message}`);
+  const creatorPerson = (creatorRes?.data ?? null) as { id: string; display_name: string } | null;
+
   const appears = people.filter((p) => !MAKER_ROLES.has(p.role) && p.person);
 
   const subjectPaths = subjects
@@ -212,7 +247,14 @@ export async function getRecord(role: Role, id: string): Promise<RecordDetail | 
             text: `${shortName(p.person!.display_name)}${p.role !== 'author' ? ` (${ROLE_KO[p.role]})` : ''}`,
             href: `/people/${p.person!.id}`,
           }))
-        : it.creator,
+        : creatorPerson
+          ? [
+              {
+                text: shortName(creatorPerson.display_name),
+                href: `/people/${creatorPerson.id}`,
+              },
+            ]
+          : it.creator,
     date: it.created_edtf
       ? { value: it.created_edtf, verified: it.date_verified }
       : it.created_start
@@ -224,7 +266,15 @@ export async function getRecord(role: Role, id: string): Promise<RecordDetail | 
         ? {
             text: sourcePath.map((s) => s.label).join(' > '),
             path: sourcePath,
-            note: it.provenance ?? undefined,
+            // 실물이 어디 있는지 적혀 있으면 "실물 원본" 인장을 찍는다. 사본을
+            // 만든 뒤에 종이가 어디로 갔는지가 가장 빨리 잊히고, 그 한 줄이
+            // 없으면 이 기록은 화면에만 있는 것처럼 읽힌다.
+            original: Boolean(it.physical_location),
+            // 상태는 다음에 실물을 꺼낼 사람이 무엇을 조심해야 하는지다.
+            note:
+              [it.provenance, it.physical_location, it.physical_condition]
+                .filter((v): v is string => Boolean(v))
+                .join(' · ') || undefined,
           }
         : null,
     subject: subjectPaths.length > 0 ? subjectPaths : null,
@@ -281,13 +331,28 @@ export async function getRecord(role: Role, id: string): Promise<RecordDetail | 
       };
     }),
     stories,
+    // 분류 경로는 한 축만 따라간다 — 형태분류다. 출처와 형태를 한 줄에 섞으면
+    // 각 단계가 무엇의 하위인지 알 수 없고, 눌렀을 때 어디로 가는지도 어긋난다.
+    // 나머지 세 축은 상세정보 표에서 각자의 줄로 간다.
     crumbs: [
-      { label: '기록 찾기', href: '/search' },
-      ...(it.source
-        ? [{ label: it.source, href: `/search?source=${encodeURIComponent(it.source)}` }]
+      { label: '형태분류', href: '/search' },
+      { label: typeLabel(it.type), href: `/search?form=${encodeURIComponent(it.type)}` },
+      ...(it.doc_type
+        ? [
+            {
+              label: it.doc_type,
+              href: `/search?form=${encodeURIComponent(`${it.type}/${it.doc_type}`)}`,
+            },
+          ]
         : []),
-      { label: typeLabel(it.type) },
     ],
+    terms: {
+      access: accessLabel(it.access_level),
+      rights: it.rights,
+      aiOptout: it.ai_optout,
+      physicalLocation: it.physical_location,
+      physicalCondition: it.physical_condition,
+    },
     transcript: trRes.data as RecordDetail['transcript'],
   };
 }
@@ -310,11 +375,15 @@ function fileFormat(f?: { mime: string | null; bytes: number | null; width: numb
  * 그 차이를 적어 두지 않으면 관리자가 공개 범위를 잘못 판단한다.
  */
 function rightsLabel(level: AccessLevel, rights: string | null): string | null {
-  const base =
-    level === 'public'
-      ? '가족 공개 — 로그인한 사람 모두'
-      : level === 'family'
-        ? '가족 제한'
-        : '비공개 — 관리자만';
+  const base = accessLabel(level);
   return rights ? `${base} · ${rights}` : base;
+}
+
+/** 공개 범위 한 마디. 표와 화면 끝 이용조건 구획이 같은 말을 쓰게 한다. */
+function accessLabel(level: AccessLevel): string {
+  return level === 'public'
+    ? '가족 공개 — 로그인한 사람 모두'
+    : level === 'family'
+      ? '가족 제한'
+      : '비공개 — 관리자만';
 }

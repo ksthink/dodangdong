@@ -6,6 +6,7 @@ import { num } from '@/lib/ui';
 import PersonHeader from '@/components/person/PersonHeader';
 import LifeLanes from '@/components/chronicle/LifeLanes';
 import { ResultRow } from '@/components/search/parts';
+import RelatedList from '@/components/record/RelatedList';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   // 감추려던 이름이 그 구분에서 새어 나간다.
   if (!detail) notFound();
 
-  const { person, parents, spouses, children, appears, made, lane, from, to } = detail;
+  const { person, parents, spouses, children, appears, made, lane, from, to , stories } = detail;
   const family: { label: string; people: PersonKin[] }[] = [
     { label: '부모', people: parents },
     { label: '배우자', people: spouses },
@@ -41,6 +42,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         short={person.short}
         face={person.face}
         kicker="인물"
+        identifier={person.identifier ?? undefined}
         aliases={person.aliases}
         born={person.bornYear}
         died={person.diedYear}
@@ -91,6 +93,16 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         records={made}
         empty={`${person.short}이(가) 만든 기록이 아직 없습니다.`}
       />
+
+      {/* 인물에서 이야기로 건너가는 길. 이것이 없으면 공들여 엮은 글을
+          아무도 찾지 못한다 — 이야기 목록에서만 닿을 수 있게 된다. */}
+      {stories.length > 0 ? (
+        <RelatedList
+          title="관련 이야기"
+          code="dcterms:isPartOf"
+          items={stories.map((st) => ({ title: st.title, href: `/stories/${st.id}` }))}
+        />
+      ) : null}
     </main>
   );
 }

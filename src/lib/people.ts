@@ -31,6 +31,8 @@ import { thumbsFor, type ItemRow } from './queries';
 
 export interface PersonSummary {
   id: string;
+  /** FP-001. uuid 는 사람이 주고받을 수 없어서 따로 둔다. */
+  identifier: string | null;
   /** 전거의 display_name. "김순자(할머니)" 꼴. */
   name: string;
   /** 부르는 이름. 괄호 안. */
@@ -82,6 +84,8 @@ export interface PersonDetail {
   appears: PersonRecord[];
   /** 만든 기록. */
   made: PersonRecord[];
+  /** 그 인물이 나오거나 만든 기록이 들어간 이야기. */
+  stories: { id: string; title: string }[];
   /** 그 인물 한 줄짜리 생애 레인. */
   lane: Lane;
   from: number;
@@ -92,6 +96,7 @@ export interface PersonDetail {
 
 interface PersonRow {
   id: string;
+  identifier: string | null;
   display_name: string;
   aliases: string[] | null;
   birth_edtf: string | null;
@@ -103,7 +108,7 @@ interface PersonRow {
 }
 
 const PERSON_COLUMNS =
-  'id, display_name, aliases, birth_edtf, death_edtf, born_year, died_year, relation_to_root, note';
+  'id, identifier, display_name, aliases, birth_edtf, death_edtf, born_year, died_year, relation_to_root, note';
 
 /** 만든 사람으로 세는 역할. 나머지(depicted·recipient·speaker·mentioned)는 나오는 쪽. */
 const MADE_ROLES = new Set(['photographer', 'author']);
@@ -222,6 +227,7 @@ export async function getPeopleList(role: Role): Promise<PersonSummary[]> {
       .find((v): v is string => Boolean(v));
     return {
       id: p.id,
+      identifier: p.identifier,
       name: p.display_name,
       short: shortName(p.display_name),
       aliases: p.aliases ?? [],
@@ -403,9 +409,30 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
   const from = years.length ? Math.floor(Math.min(...years) / 10) * 10 : nowYear - 100;
   const to = years.length ? Math.ceil(Math.max(...years) / 10) * 10 : nowYear;
 
+  // ── 관련 이야기 ─────────────────────────────────────────────
+  // 그 사람이 나오거나 만든 기록이 어느 이야기에 엮였는지. 인물에서
+  // 이야기로 건너가는 길이 없으면, 공들여 엮은 글을 아무도 찾지 못한다.
+  const myItemIds = [...appears, ...made].map((i) => i.id);
+  const { data: storyRows, error: storyErr } = myItemIds.length
+    ? await db()
+        .from('curation_ref')
+        .select('curation_block(collection:collection_id(id, title, kind))')
+        .in('item_id', myItemIds)
+    : { data: [], error: null };
+  if (storyErr) throw new Error(`인물 관련 이야기 조회 실패: ${storyErr.message}`);
+
+  const stories = ((storyRows ?? []) as unknown as {
+    curation_block: { collection: { id: string; title: string; kind: string } | null } | null;
+  }[])
+    .map((r) => r.curation_block?.collection)
+    .filter((c): c is { id: string; title: string; kind: string } => Boolean(c) && c!.kind === 'story')
+    .filter((c, i, arr) => arr.findIndex((x) => x.id === c.id) === i)
+    .map((c) => ({ id: c.id, title: c.title }));
+
   return {
     person: {
       id: self.id,
+      identifier: self.identifier,
       name: self.display_name,
       short: shortName(self.display_name),
       aliases: self.aliases ?? [],
@@ -423,6 +450,7 @@ export async function getPersonDetail(role: Role, id: string): Promise<PersonDet
     parents: parents.sort(byGeneration).map(kin),
     spouses: spouses.sort(byGeneration).map(kin),
     children: children.sort(byGeneration).map(kin),
+    stories,
     appears: appears.map(toRecord),
     made: made.map(toRecord),
     lane,

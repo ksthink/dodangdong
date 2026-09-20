@@ -31,7 +31,7 @@ function EntryLine({ e }: { e: YearEntry }) {
 }
 
 export default function ChronicleYear({ data }: { data: ChronicleYearData }) {
-  const { year, ages, events, records, recordCount, thumbs, world } = data;
+  const { year, ages, events, records, recordCount, thumbs, world, moreHref } = data;
 
   return (
     <section className="jg-cyear" id={`y${year}`}>
@@ -89,6 +89,11 @@ export default function ChronicleYear({ data }: { data: ChronicleYearData }) {
           ) : (
             <p className="jg-empty">기록 없음</p>
           )}
+          {moreHref ? (
+            <Link className="jg-cyear-more" href={moreHref}>
+              이 해의 기록 모두 보기 →
+            </Link>
+          ) : null}
         </div>
 
         {world.length > 0 ? (

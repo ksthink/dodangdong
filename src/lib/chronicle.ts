@@ -72,6 +72,8 @@ export interface ChronicleYearData {
   recordCount: number;
   thumbs: string[];
   world: { date: string; title: string }[];
+  /** "이 해의 기록 모두 보기 →". 해마다 목록을 다 펴지 않고 넘긴다. */
+  moreHref: string | null;
 }
 
 export interface ChronicleData {
@@ -316,6 +318,9 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
           .slice(0, 5)
           .map((fileId) => `/media/${fileId}`),
         world: worldByYear.get(year) ?? [],
+        // 한 해에 기록이 많으면 여기서 다 보여주지 않는다. 연표는 훑는
+        // 곳이고, 다 보는 것은 찾기 화면의 몫이다.
+        moreHref: bucket.some((it) => it.type !== 'Event') ? `/search?year=${year}` : null,
       };
     });
 

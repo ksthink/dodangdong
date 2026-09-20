@@ -28,6 +28,12 @@ export default async function StoryPage({ params }: { params: Promise<{ id: stri
   return (
     <main className="wrap">
       <header className="story-head">
+        {/* 꼬리표를 제목 위에 둔다. 첫 화면 히어로에서 "이달의 이야기"를
+            보고 들어온 사람이, 같은 말을 여기서도 만나야 같은 것을 읽고
+            있다는 것을 안다. */}
+        <p className="jg-story-kicker">
+          <span className="jg-hero-kind jg-pixel">이야기</span>
+        </p>
         <h1 className="story-title jg-pixel">{story.title}</h1>
         {story.summary ? <p className="story-lead">{story.summary}</p> : null}
         {story.period ? <p className="jg-date">{story.period}</p> : null}

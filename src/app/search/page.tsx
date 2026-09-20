@@ -39,6 +39,7 @@ export default async function SearchPage({
     subject: sp.subject,
     period: sp.period,
     q: sp.q,
+    year: sp.year,
   };
   const sort = (SORTS.find((s) => s.key === sp.sort)?.key ?? 'default') as SortKey;
   const pageSize = PAGE_SIZES.includes(Number(sp.size)) ? Number(sp.size) : 20;
@@ -59,7 +60,7 @@ export default async function SearchPage({
 
   const chips = AXES.map(({ key, title }) => ({ key, title, value: sel[key] }))
     .filter((c): c is { key: Axis; title: string; value: string } => Boolean(c.value));
-  const anyFilter = chips.length > 0 || Boolean(sel.q);
+  const anyFilter = chips.length > 0 || Boolean(sel.q) || Boolean(sel.year);
   const lastPage = Math.max(1, Math.ceil(res.total / pageSize));
 
   return (
@@ -99,6 +100,13 @@ export default async function SearchPage({
             <li>
               <Link className="filter-chip" href={urlWith({ q: undefined })}>
                 검색어: {sel.q} ✕
+              </Link>
+            </li>
+          ) : null}
+          {sel.year ? (
+            <li>
+              <Link className="filter-chip" href={urlWith({ year: undefined })}>
+                {sel.year}년 ✕
               </Link>
             </li>
           ) : null}
