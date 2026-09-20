@@ -18,11 +18,18 @@ export interface ItemRow {
   seq: number;
   title: string;
   type: string;
+  /** 형태분류의 하위 단계 — 편지·일기·족보 따위. */
+  doc_type: string | null;
   created_edtf: string | null;
   created_start: string | null;
   created_precision: string;
   created_uncertain: boolean;
   created_approx: boolean;
+  /** 생산일자가 증빙으로 확인되었는가. 참일 때만 "확인됨" 인장을 찍는다. */
+  date_verified: boolean;
+  date_verified_by: string | null;
+  submitted_at: string;
+  modified_at: string;
   description: string | null;
   creator: string | null;
   medium: string | null;

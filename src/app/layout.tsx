@@ -26,6 +26,7 @@ export const metadata: Metadata = {
 const NAV = [
   { href: '/', label: '처음' },
   { href: '/chronicle', label: '연표' },
+  { href: '/search', label: '찾기' },
   { href: '/collections', label: '이야기' },
   { href: '/gallery', label: '자료' },
   { href: '/people', label: '사람' },

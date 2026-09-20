@@ -240,7 +240,7 @@ export async function getChronicle(role: Role, decade?: number): Promise<Chronic
           laneEvents.push({
             date: y,
             title: canView(it.access_level, role) ? it.title : '잠긴 사건',
-            verified: Boolean((it as ItemRow & { date_verified?: boolean }).date_verified),
+            verified: it.date_verified,
           });
         } else {
           laneRecords.push(y);
@@ -337,7 +337,7 @@ function toEntry(it: ItemRow, role: Role): YearEntry {
     title: visible ? it.title : '잠긴 자료',
     href: visible ? `/item/${it.id}` : null,
     type: it.type === 'Event' ? null : typeLabel(it.type),
-    verified: Boolean((it as ItemRow & { date_verified?: boolean }).date_verified),
+    verified: it.date_verified,
     locked: !visible,
   };
 }
