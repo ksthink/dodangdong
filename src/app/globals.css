@@ -177,12 +177,8 @@ img.jg-pixelated { image-rendering: pixelated; }
  * ═══════════════════════════════════════════════════════════════════ */
 
 
-body { background: var(--paper); color: var(--ink); font-family: var(--font-pixel); margin: 0; }
-a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: var(--stroke); }
-:focus-visible { outline: var(--stroke) solid var(--focus); outline-offset: 2px; }
-/* mulmaru: keep the pixels crisp */
-.jg-pixel, .jg-card-title, .jg-verified, .jg-row-title { font-family: var(--font-pixel); font-weight: 400; -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; font-smooth: never; }
-img.jg-pixelated { image-rendering: pixelated; }
+/* body·a·:focus-visible·픽셀 렌더링·.jg-pixelated 는 위 바탕 구역에서 이미
+ * 선언했다. 번들에서 옮겨오며 딸려온 중복이라 여기서는 지운다. */
 
 /* Button — 2px ink frame, hard 4px shadow, pressed = shifted */
 .jg-btn { font: 600 22px/33px var(--font-pixel); padding: var(--space-2) var(--space-4); border-radius: var(--radius-0); border: var(--stroke) solid var(--ink); box-shadow: var(--shadow-pixel); cursor: pointer; }
@@ -900,9 +896,14 @@ main { min-height: 60vh; }
   border: 2px solid var(--edge-2); color: var(--text-2); background: var(--panel);
   display: inline-flex; align-items: center; gap: 0.3rem;
 }
-.chip.accent { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
-.chip.mint   { color: var(--mint);   border-color: var(--mint);   background: var(--mint-bg); }
-.chip.warn   { color: var(--warn);   border-color: var(--warn);   background: var(--warn-bg); }
+/* 색이 사라진 자리를 모양이 대신한다.
+ *   accent = 지금 고른 것      → 먹색으로 채운다 (명세의 "선택된 태그")
+ *   warn   = 아직 확정 안 됨   → 점선 (명세의 "점선 칩")
+ *   mint   = 확정된 상태 표시  → 실선을 진하게
+ * 이 셋은 옛 이름이라 뜻이 어긋난다. 화면을 옮길 때 StatusBadge 로 바꾼다. */
+.chip.accent { color: var(--on-ink); border-color: var(--ink); background: var(--ink); }
+.chip.mint   { color: var(--ink);    border-color: var(--ink);    background: var(--paper); }
+.chip.warn   { color: var(--ink-muted); border-color: var(--rule-strong); background: var(--paper); border-style: dashed; }
 
 .box {
   border: 2px solid var(--edge); background: var(--panel);
@@ -915,7 +916,12 @@ main { min-height: 60vh; }
   border: 2px solid var(--warn); background: var(--warn-bg);
   padding: 0.7rem 0.85rem; font-size: var(--fs-meta); color: var(--text-2); line-height: 1.75;
 }
-.callout.err { border-color: var(--danger); background: var(--panel); color: var(--danger); }
+/* 오류는 색이 아니라 모양으로 알린다 — 테두리를 4px 로 굵히고 문장을 굵게.
+ * 인장색(--mark)은 "확인됨"과 "실물 원본" 전용이라 오류에 쓰지 않는다. */
+.callout.err {
+  border-width: var(--stroke-heavy); border-color: var(--ink);
+  background: var(--paper); color: var(--ink); font-weight: 700;
+}
 
 /* ---------------------------------------------------------------- 버튼·폼 */
 
@@ -976,7 +982,9 @@ textarea { line-height: 1.7; resize: vertical; }
 .tile.locked { display: grid; place-items: center; }
 .tile .lock {
   position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
-  font-size: var(--fs-meta); color: var(--mint); background: var(--mint-bg); padding: 0.3rem;
+  /* 썸네일 위에 얹히므로 면과 테두리로 띄운다. 색으로 알리지 않는다. */
+  font-size: var(--fs-meta); color: var(--ink); background: var(--paper);
+  border: var(--stroke) solid var(--ink); padding: 0.3rem;
 }
 .tile .kindmark {
   position: absolute; left: 0; bottom: 0; background: var(--panel);
