@@ -1,194 +1,115 @@
 import Link from 'next/link';
-import { getTimeline, thumbsFor } from '@/lib/queries';
-import { currentRole, canView } from '@/lib/access';
-import { parseEdtf } from '@/lib/edtf';
-import { maskItem } from '@/lib/mask';
-import { ItemTile } from '@/components/ItemTile';
-import { TypeIcon, TYPE_LABELS } from '@/components/icons';
+import { currentRole } from '@/lib/access';
+import { getHome } from '@/lib/home';
+import { num } from '@/lib/ui';
+import { Hero } from '@/components/home/Hero';
+import { SearchField } from '@/components/home/SearchField';
+import { RecordCard } from '@/components/home/RecordCard';
+import { StoryCard } from '@/components/home/StoryCard';
+import FacetGroup from '@/components/search/FacetGroup';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * 연표 — 가족이 처음 만나는 화면.
+ * 첫 화면.
  *
- * 화면을 따로 만드는 게 아니라 dcterms:created 가 있는 자료가 스스로 자리를 잡는다.
- * 시기가 비면 연표에 나타나지 못하므로, 미상 자료는 맨 아래 따로 모아
- * "여기 손볼 것이 있다"는 사실을 관리자와 가족 모두에게 보여준다.
+ * 아카이브의 첫인상은 "무엇이 있는가"가 아니라 "무엇을 먼저 보면 되는가"를
+ * 말해야 한다. 자료 목록을 그대로 쏟으면 방문한 가족은 어디서부터 볼지
+ * 모른다. 그래서 큐레이션이 맨 위에 온다.
+ *
+ * 위에서 아래로: 히어로 → 찾기와 형태분류별 건수 → 이야기 둘 → 최근 기록 넷.
  */
-export default async function TimelinePage() {
+export default async function HomePage() {
   const role = await currentRole();
-  const { groups, undated } = await getTimeline();
-
-  const allIds = [...groups.flatMap((g) => g.items.map((i) => i.id)), ...undated.map((i) => i.id)];
-  const thumbs = await thumbsFor(allIds);
-
-  const total = allIds.length;
+  const home = await getHome(role);
 
   return (
-    <main className="wrap">
-      <section className="stack">
-        <span className="eyebrow">연표</span>
-        <h1>생애를 따라 훑어보기</h1>
-        <p className="lede">
-          연도 위에 자료가 걸립니다. 파란 네모는 관리자가 대표로 표시한 대목입니다.
-        </p>
-        <div className="row">
-          <span className="chip">자료 {total}건</span>
-          <span className="chip">연도 {groups.length}개</span>
-          {undated.length > 0 && <span className="chip warn">시기 미상 {undated.length}건</span>}
+    <main className="wrap page-home">
+      {home.slides.length > 0 ? <Hero slides={home.slides} /> : null}
+
+      <section className="home-find">
+        <div className="home-find-search">
+          <SearchField
+            label="기록 찾기"
+            placeholder="제목, 인물, 장소, 연도 — 예: 부엌, 1978"
+          />
+          <p className="home-total">
+            {/* 관리자는 잠긴 것까지 세지만, 가족에게는 볼 수 있는 것만 센다.
+                보이지 않는 것을 숫자로 알려 주면 "무엇이 빠졌나" 하는 질문만 남는다. */}
+            {role === 'admin' ? '전체 기록 ' : '공개 기록 '}
+            <strong>{num(home.total)}</strong>건
+          </p>
+        </div>
+
+        <div className="home-types">
+          <FacetGroup
+            group={{
+              key: 'form',
+              title: '형태분류',
+              code: 'dc:type',
+              items: home.typeCounts.map((t) => ({
+                value: t.value,
+                label: t.label,
+                count: t.count,
+                selected: false,
+              })),
+            }}
+            hrefFor={(value) => `/search?form=${encodeURIComponent(value)}`}
+          />
         </div>
       </section>
 
-      {total === 0 ? (
-        <div className="box">
-          <p>아직 등록된 자료가 없습니다.</p>
-          <p className="small">
-            관리자 화면에서 수집 세션과 묶음을 만든 뒤 폴더째 올리면 여기에 나타납니다.
-          </p>
-        </div>
-      ) : (
-        <section className="tl">
-          <div className="tl-spine" />
-          {groups.map((g) => {
-            const featured = g.items.filter((i) => i.is_featured);
-            const lead = featured[0] ?? g.items[0];
-            const rest = g.items.filter((i) => i.id !== lead.id);
-            const parsed = parseEdtf(lead.created_edtf);
-            return (
-              <ContinuedGroup
-                key={g.year}
-                year={g.year!}
-                lead={lead}
-                leadLabel={parsed.label}
-                rest={rest}
-                role={role}
-                thumbs={thumbs}
+      {home.stories.length > 0 ? (
+        <section className="home-block">
+          <div className="block-head">
+            <h2 className="jg-pixel">이야기</h2>
+            <Link href="/stories">이야기 모두 보기 →</Link>
+          </div>
+          <div className="grid-2">
+            {home.stories.map((s) => (
+              <StoryCard
+                key={s.id}
+                title={s.title}
+                summary={s.summary}
+                count={s.count}
+                period={s.period}
+                image={s.cover}
+                href={`/stories/${s.id}`}
               />
-            );
-          })}
-        </section>
-      )}
-
-      {undated.length > 0 && (
-        <section className="stack">
-          <div className="rule" />
-          <h2>시기 미상</h2>
-          <p className="small">
-            연표에 자리를 잡으려면 시기가 필요합니다. 관리자가 EDTF 로 채우면 위로 올라갑니다.
-          </p>
-          <div className="grid">
-            {undated.slice(0, 12).map((i) => (
-              <div className="cell" key={i.id}>
-                <ItemTile
-                  id={i.id}
-                  title={i.title}
-                  type={i.type}
-                  accessLevel={i.access_level}
-                  visible={canView(i.access_level, role)}
-                  thumbFileId={thumbs.get(i.id)}
-                  aspect="1"
-                />
-                <span className="cap">
-                  {maskItem(i, canView(i.access_level, role)).title}
-                </span>
-              </div>
             ))}
           </div>
         </section>
-      )}
+      ) : null}
+
+      <section className="home-block">
+        <div className="block-head">
+          <h2 className="jg-pixel">최근 등록한 기록</h2>
+          <Link href="/search?sort=added">더 보기 →</Link>
+        </div>
+        {home.recent.length === 0 ? (
+          <div className="empty">
+            <p className="jg-pixel">아직 기록이 없다</p>
+            <p>관리 화면에서 묶음을 만들고 자료를 올리면 여기에 쌓입니다.</p>
+          </div>
+        ) : (
+          <div className="grid-4">
+            {home.recent.map((r) => (
+              <RecordCard
+                key={r.id}
+                title={r.title}
+                type={r.type}
+                docType={r.doc_type}
+                date={r.created_edtf ?? r.created_start}
+                dateVerified={r.date_verified}
+                creator={r.creator}
+                identifier={r.identifier}
+                thumb={r.thumb}
+                href={`/item/${r.id}`}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   );
-}
-
-function ContinuedGroup({
-  year,
-  lead,
-  leadLabel,
-  rest,
-  role,
-  thumbs,
-}: {
-  year: number;
-  lead: Awaited<ReturnType<typeof getTimeline>>['undated'][number];
-  leadLabel: string;
-  rest: Awaited<ReturnType<typeof getTimeline>>['undated'];
-  role: Awaited<ReturnType<typeof currentRole>>;
-  thumbs: Map<string, string>;
-}) {
-  const leadVisible = canView(lead.access_level, role);
-  const shown = rest.slice(0, 5);
-  const more = rest.length - shown.length;
-  // 볼 수 없는 자료는 제목·설명·묶음명까지 가린다. 제목도 내용이다.
-  const masked = maskItem(lead, leadVisible);
-
-  return (
-    <>
-      <div className="tl-year">{year}</div>
-      <div className={`tl-item${lead.is_featured ? ' pinned' : ''}`}>
-        <h4>
-          {leadVisible ? (
-            <Link href={`/item/${lead.id}`}>{masked.title}</Link>
-          ) : (
-            <span className="dim">{masked.title}</span>
-          )}
-        </h4>
-        <div className="row" style={{ gap: '0.5rem' }}>
-          <span className="small">{leadLabel}</span>
-          {masked.bundleTitle && (
-            <>
-              <span className="small dim">·</span>
-              <span className="small dim">{masked.bundleTitle}</span>
-            </>
-          )}
-        </div>
-        {masked.description && <p>{masked.description}</p>}
-
-        <div className="tl-media">
-          <ItemTile
-            id={lead.id}
-            title={lead.title}
-            type={lead.type}
-            accessLevel={lead.access_level}
-            visible={leadVisible}
-            thumbFileId={thumbs.get(lead.id)}
-            width={96}
-            height={72}
-          />
-          {shown.map((i) => (
-            <ItemTile
-              key={i.id}
-              id={i.id}
-              title={i.title}
-              type={i.type}
-              accessLevel={i.access_level}
-              visible={canView(i.access_level, role)}
-              thumbFileId={thumbs.get(i.id)}
-              width={96}
-              height={72}
-            />
-          ))}
-          {more > 0 && (
-            <span className="tile" style={{ width: 96, height: 72, display: 'grid', placeItems: 'center' }}>
-              <span className="small">+{more}</span>
-            </span>
-          )}
-        </div>
-
-        <div className="row" style={{ gap: '0.7rem' }}>
-          {typeSummary([lead, ...rest]).map(([type, n]) => (
-            <span key={type} className="small" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-              <TypeIcon type={type} size={11} />
-              {TYPE_LABELS[type] ?? type} {n}
-            </span>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function typeSummary(items: { type: string }[]): [string, number][] {
-  const counts: Record<string, number> = {};
-  for (const i of items) counts[i.type] = (counts[i.type] ?? 0) + 1;
-  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
